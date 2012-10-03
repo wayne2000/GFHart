@@ -62,6 +62,8 @@ void initSystem(void)
 {
   initHardware();       //!<  Initialize clock system, GPIO, timers and peripherals
   initUart(&hartUart);
+  //
+  enableHartRxIntr();
 }
 
 /*!
@@ -90,31 +92,62 @@ etEvents waitForEvent()
   return this;
 }
 
+#define BUFSIZE 50
 void main(void)
 {
   volatile unsigned int i;
   low_power =1;
   //CLEARB(TP_PORTOUT, TP1_MASK);  // Indicate we are running
   initSystem();
-  if(low_power)
-  {
-    __bis_SR_register(LPM3_bits + GIE);       // Enter LPM3, enable interrupts
-    __no_operation();                         // For debugger
-  }
-  else
-    _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
+  _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
+  BYTE ch[BUFSIZE];
+  for(i=0; i< BUFSIZE; ++i)
+    ch[i]=0;
+  i=0;
+  char rx=0, tx=0, data=0, dget=0;
+
   while(1)                                  // continuous loop
   {
-    etSystemEvent =waitForEvent();
-    switch(etSystemEvent)
+      if(rx)
+        dget = getcUart(&hartUart);
+      if(tx)
+        putcUart(++data,&hartUart);
+
+
+
+#if 0
+      if(!isRxEmpty(&hartUart))
     {
-    case evHartRxChar:
-      break;
-
+      // Get the char
+        if(i<BUFSIZE)
+          ch[i++] = getFifo(&hartUart.rxFifo);
     }
+#endif
 
-    for(i=5000;i>0;i--);                   // Delay
-    //P1OUT ^=0x01;
   }
 }
+
+
+#if 0
+
+if(low_power)
+{
+  __bis_SR_register(LPM3_bits + GIE);       // Enter LPM3, enable interrupts
+  __no_operation();                         // For debugger
+}
+else
+  _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
+
+etSystemEvent =waitForEvent();
+switch(etSystemEvent)
+{
+case evHartRxChar:
+  break;
+
+}
+
+for(i=5000;i>0;i--);                   // Delay
+//P1OUT ^=0x01;
+
+#endif
 

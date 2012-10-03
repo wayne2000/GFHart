@@ -101,7 +101,7 @@ void checkClock(void)
 
 /*!
  * \function  initClock(void)
- * \brief     Set clocks MCLK & SMCLK - DCO 1.048MHz FLL:XT1, ACLK -XT1 xtal 32.768KHz
+ * \brief     Set clocks MCLK & SMCLK - DCO 1.048576MHz FLL:XT1, ACLK -XT1 xtal 32.768KHz
  *
  * Main clock MCLK source is DCO, maximum permissible 1.048MHz (Low power)
  * DCO stabilized by FLL (as default) using XT1 as the reference clock.
@@ -116,24 +116,24 @@ void initClock(void)
   // X2 should be off after POR - Turn it off if we came from a Soft-reset
   UCSCTL6 |= XT2OFF;          // Set XT2 Off
   //  XT1 Clock pins
-  XT1_PORTREN &= ~(XIN_MASK | XOUT_MASK);   // remove resistors (if any) from Xtal pins)
+  XT1_PORTREN &= ~(XIN_MASK | XOUT_MASK);   // remove resistors (if any) from Xtal pins
   XT1_PORTDIR |= XOUT_MASK;                 // XOUT as output (JY)
-  XT1_PORTOUT |= XOUT_MASK;                 // XOUT high       (JY lowest drive?)
-  XT1_PORTSEL |= XIN_MASK | XOUT_MASK;      // Xtal function, this enables XT1 oscillator but with REFO
-  UCSCTL6 = ~(XCAP0_L | XCAP1_L) & UCSCTL6 | XCAP_2;    // Cap = (10.5 + 2)pF
+  XT1_PORTOUT |= XOUT_MASK;                 // XOUT high      (JY lowest drive?)
+  XT1_PORTSEL |= XIN_MASK | XOUT_MASK;      // Xtal function, this enables XT1 oscillator but uses REFO here
+  UCSCTL6 =  ~(XCAP0_L | XCAP1_L) & UCSCTL6 | XCAP_2;     // Clear default XCAP_3 and set Cap = (10.5 + 2)pF
   //
   //
   //  Setup DCO and FLL
-  //  DCOCLK = (32768/1 ) * ( 1 * (31+1)) = 1,058,576 Hz
+  //  DCOCLK = (32768/1 ) * ( 1 * (31+1)) = 1,048,576 Hz
   UCSCTL2 = FLLD__1 |       //  FLLD=0  divide-feedback-by-1
             0x001F;         //  FLLN=31 divide feedback by 31+1
-  UCSCTL3 = SELREF_0  |     //  SELREF = 0  FLL reference is XT1 = 32768 Hz
+  UCSCTL3 = SELREF_0  |     //  SELREF = 0  FLL reference is XT1 = 32768 Hz, XT1 should start from here
             FLLREFDIV__1;   //  FLLREFDIV=0 FLL reference div-by-1
 
   // Select the clocks
   UCSCTL4 |=  SELA_0 |      //  ACLK  = XT1CLK  =   32.768Khz external crystal
-              SELS_4 |      //  SMCLK = DCOCLKDIV=  1,058,576
-              SELM_4;       //  MCLK  = DCOCLKDIV=  1,058,576
+              SELS_4 |      //  SMCLK = DCOCLKDIV=  1,048,576
+              SELM_4;       //  MCLK  = DCOCLKDIV=  1,048,576
 
   // Set clocks Dividers DIVPA = DIVA = DIVS = DIVM = 1
   UCSCTL5 = DIVPA_0 |       //  ACLKpin = ACLK /1
@@ -151,9 +151,11 @@ void initClock(void)
   } while (SFRIFG1&OFIFG);                      // Test oscillator fault flag
   //!DEBUG:
   CLEARB(TP_PORTOUT, TP1_MASK);  // TP1 On duration indicates XT1&DCO stabilization
-  _no_operation();          //  Debug point: DO any change here == Done with clock settings
-
+  _no_operation();          //  Debug point: DO any change here
+  //
+  //    Done with system clock settings
 }
+
 //
 // \function  initTimers()
 //  Configure msp430 timers
@@ -201,10 +203,17 @@ void initHardware(void)
   P1DS &= ~(BIT2|BIT3);   // Drive strength low
   P1IES &= ~(BIT2|BIT3);  // lo->hi transition (for now)
   P1IFG &= ~(BIT2|BIT3);  // clear IFG in case it's set
+
   // P4.0 is the RTS output signal, P2.1 is the modem RST\ signal
   P4SEL &= ~BIT0;
   P4DIR |= BIT0;
   P4OUT |= BIT0;
+
+  // Hart Uart Pins
+  HART_UART_PORTSEL |= HART_UART_RX_MASK | HART_UART_TX_MASK;
+  HART_UART_PORTDS  |= HART_UART_TX_MASK;       // Full output drive strength in TX
+
+
 
   // initialize the clock system
   initClock();
@@ -212,7 +221,7 @@ void initHardware(void)
   P1DIR |= BIT0;
   P1SEL |= BIT0;  //P1.0 is ACLK    32.768KHz
   P2DIR |= BIT2;
-  P2SEL |= BIT2;  //P2.2 is SMCLK   1.058MHz
+  P2SEL |= BIT2;  //P2.2 is SMCLK   1.048MHz
 
   _disable_interrupts(); //vj  make sure all irq are disable
   //  Pulse TxRxHart line to Tx mode two times and leave it in Rx Mode
@@ -235,9 +244,6 @@ void initHardware(void)
   //
   initTimers();
 
-  // Init HART and HSB uarts
-  // initUarts();
-  //
   //USE_PMM_CODE
   INIT_SVS_supervisor();
 
@@ -309,6 +315,7 @@ static void toggleRtsLine()
 #pragma vector=TIMERB0_VECTOR
 __interrupt void TIMERB1_ISR(void)
 {
+  _no_operation();
 
   //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
 

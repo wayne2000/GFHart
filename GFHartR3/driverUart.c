@@ -16,8 +16,8 @@
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
-#define HartRxFifoLen   128
-#define HartTxFifoLen   16
+#define HartRxFifoLen   4
+#define HartTxFifoLen   6
 #define HsbRxFifoLen    128
 #define HsbTxFifoLen    16
 
@@ -112,46 +112,37 @@ BOOLEAN initUart(stUart *pUart)
   resetFifo(&pUart->rxFifo, pUart->fifoRxAlloc);
   resetFifo(&pUart->txFifo, pUart->fifoTxAlloc);
   //
-  //  Configure the msp ucsi for odd parity
-  pUart->initUcsi(); //
+  pUart->bRxError = FALSE;
+  pUart->bNewRxChar = FALSE;
+  pUart->bRxFifoOverrun = FALSE;
+
   //
+  //  Configure the msp ucsi for odd parity 1200 bps
+  pUart->initUcsi(); //
   return TRUE;
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: initUart()
-//
-// Description:
-//
-// Sets up the A1 UART for 1200 baud
-//
-// Parameters: int - initial parity setting
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// Assumes SMCLK at 1 Mhz
-//
-///////////////////////////////////////////////////////////////////////////////////////////
+/*!
+ * \function    initHartUart()
+ * Initializes the Hart Uart to 1200, 8,o,1 using SMCLK @1.048576 MHz
+ *
+ */
 static void initHartUart(void)
 {
-  P4SEL = BIT5 | BIT4;                      // P3.6,7 = USCI_A1 TXD/RXD
-  HART_CTL1 = UCSWRST;                      // Reset UART
-  HART_CTL1 |= UCSSEL_2;                    // SMCLK as source
+  UCA1CTL1 =    UCSWRST;            // Reset internal SM
+  UCA1CTL1 |=   UCSSEL_2;           // SMCLK as source
 
-  HART_BR0 = 0x6a;                             // 1.048MHz 1200
-  HART_BR1 = 0x03;                              // 1MHz 1200
-  HART_MCTL = 0;
+  UCA1BR0 = 0x6A;                   // BR= 1048576/1200 = 873.8133 ~ 874
+  UCA1BR1 = 0x03;
+  UCA1MCTL =0;                      // No modulation
+
 
   //  case PARITY_ODD:
-  HART_CTL0 |= UCPEN;                     //  setOddParity();
-  HART_CTL0 &= ~UCPAR;
-  // Set the TX line for full drive strength
-  P4DS |= BIT4;
-  HART_CTL1 &= ~UCSWRST;                     // **Initialize USCI state machine**
+  UCA1CTL0  |= UCPEN;               //  set parity
+  UCA1CTL0  &= ~UCPAR;              // Odd
+
+  UCA1CTL1  &= ~UCSWRST;            // Initialize USCI state machine
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -199,31 +190,31 @@ __interrupt void hartSerialIsr(void)
 {
   _no_operation(); // recommended by TI errata
   //_enable_interrupts();
-  volatile BYTE Data, Status;
-  switch(__even_in_range(HART_IV,4))
+  volatile BYTE data;
+  switch(__even_in_range(UCA1IV,4))
   {
   case 0:
     break;                                  // Vector 0 - no interrupt
   case 2:                                   // Vector 2 - RXIFG
     //!MH: REMOVE process the character rxIsr();
     // get the character's status
-    Status = UCA1STAT & 0x78;   //Status = FE PE OE BRK
-    // get the data to clear the interrupt source
-    Data = UCA1RXBUF;
+    if(UCA1STAT & UCRXERR & UCBRK)          //  Any (FE PE OE) error or BREAK detected?
+      hartUart.bRxError = TRUE;
+    data = UCA1RXBUF;                       //  clear the RX interrupt flag and UCRXERR status flag
     if(!isRxFull(&hartUart))
     {
-      putFifo(&hartUart.rxFifo, Data);
-      hartNewCharInRxFifo = TRUE;       // Signal an Event to main loop
+      putFifo(&hartUart.rxFifo, data);
+      hartUart.bNewRxChar = TRUE;       // Signal an Event to main loop
     }
     else
-      HartRxFifoError = TRUE;       // Receiver Fifo overrun!!
+      hartUart.bRxFifoOverrun = TRUE;   // Receiver Fifo overrun!!
 
     break;
   case 4:                                   // Vector 4 - TXIFG
     // Reenable interrupts so a higher priority interrupt can run if necessary
     //!MH No longer this _bis_SR_register(GIE);
     // Disable the Tx interrupt
-    disableTxIntr();                // !MH avoids recursion
+    disableHartTxIntr();                // !MH avoids recursion
     // !MH REMOVE Call the transmit ISR txIsr();    <<<<========= Working HERE
     if(!isTxEmpty(&hartUart))
     {
@@ -258,7 +249,7 @@ __interrupt void hartSerialIsr(void)
 BOOLEAN putcUart(BYTE ch, stUart *pUart)
 {
   BOOLEAN sent = FALSE;
-  while (fifoIsFull(&hartUart.txFifo));        // wait until there is room in the fifo (turn OFF power?)
+  while (isFull(&pUart->txFifo));        // wait until there is room in the fifo (turn OFF power?)
   // Lock the TxFifo
   __disable_interrupt();
   sent = putFifo(&pUart->txFifo, ch);
@@ -277,10 +268,10 @@ BOOLEAN putcUart(BYTE ch, stUart *pUart)
 ///
 BYTE getcUart(stUart *pUart)
 {
-  while(fifoIsEmpty(pUart->rxFifo));        // Just wait here until a character arrives
+  while(isEmpty(&pUart->rxFifo));        // Just wait here until a character arrives
   //    Critical Zone
   _disable_interrupt();
-  BYTE ch = getFifo(&hartUart.rxFifo);
+  BYTE ch = getFifo(&pUart->rxFifo);
   _enable_interrupt();
   return ch;
 }

@@ -19,31 +19,7 @@
 *************************************************************************/
 
 
-/********************************
-
-Defines for UART
-
-*********************************/
-
-// A1 is the HART UART
-#define HART_CTL0   UCA1CTL0
-#define HART_CTL1   UCA1CTL1
-#define HART_BR0    UCA1BR0
-#define HART_BR1    UCA1BR1
-#define HART_MCTL   UCA1MCTL
-#define HART_IV     UCA1IV
-#define HART_IE     UCA1IE
-#define HART_IFG    UCA1IFG
-#define HART_RXBUF  UCA1RXBUF
-#define HART_TXBUF  UCA1TXBUF
-#define HART_STAT   UCA1STAT
-#define HART_CTLW0  UCA1CTLW0
-#define HART_BRW    UCA1BRW
-#define HART_ABCTL  UCA1ABCTL
-#define HART_IRCTL  UCA1IRCTL
-#define HART_IRTCTL UCA1IRTCTL
-#define HART_IRRCTL UCA1IRRCTL
-#define HART_ICTL   UCA1ICTL
+//#define HART_ICTL   UCA1ICTL
 // A0 is the HSB UART
 #define MAIN_CTL0   UCA0CTL0
 #define MAIN_CTL1   UCA0CTL1
@@ -64,7 +40,7 @@ Defines for UART
 #define MAIN_IRRCTL UCA0IRRCTL
 #define MAIN_ICTL   UCA0ICTL
 
-
+/////////////  Hardware Pins    ////////////////
 //  Test Points
 #define TP_PORTOUT P1OUT
 #define TP_PORTDIR P1DIR
@@ -81,7 +57,11 @@ Defines for UART
 #define XIN_MASK     0x10
 #define XOUT_MASK    0x20
 
-
+//  Hart Uart
+#define HART_UART_PORTSEL  P4SEL
+#define HART_UART_PORTDS   P4DS
+#define HART_UART_TX_MASK   0x10
+#define HART_UART_RX_MASK   0x20
 
 
 // Definitions from msp430x.h not found in CCS

@@ -12,6 +12,7 @@
   *   $INCLUDES
 *************************************************************************/
 #include "fifo.h"
+#include "define.h"
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
@@ -42,12 +43,15 @@ typedef enum
 
 typedef struct
 {
-  const WORD nRxBufSize, nTxBufSize;
-  void (*initUcsi)(void);
-  unsigned char *fifoRxAlloc, *fifoTxAlloc;
-  stFifo rxFifo, txFifo;
-
-
+  const WORD nRxBufSize, nTxBufSize;    //!< Internal buffer sizes
+  void (*initUcsi)(void);               //!< Function to initialize msp Uart
+  int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
+  stFifo rxFifo, txFifo;                // Input and Output streams
+  // Status flags
+  volatile BOOLEAN
+              bRxError,                 //!< A global error in Rx = cancel current Frame
+              bNewRxChar,               //!< New Char has arrived
+              bRxFifoOverrun;           //!< Fifo overrun indicator
 } stUart;
 
 
@@ -69,76 +73,84 @@ extern BOOLEAN  hartRxFrameError,           //!<  The serial isr receiver has de
                 hartNewCharInRxFifo,        //!<  New character has been moved to the Hart receiver fifo
                 hartRxFifoError,            //!<  Indicates a problem in the whole Hart Receiver Fifo (overrun)
                 hartTxFifoEmpty;            //!<  The Hart Transmitter Fifo has no more bytes to send (shift reg may still be sending)
-extern stUart   hartUart;
+extern stUart   hartUart,
+                hsbUart;
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
 
 //=========================================INLINES===============================================
 
+/*
+ * \function isRxEmpty
+ * Returns TRUE if the input stream is empty
+ */
 inline BOOLEAN isRxEmpty(stUart *pUart)
 {
   return isEmpty(&hartUart.rxFifo);
 }
+
+/*
+ * \function isRxFull
+ * Returns TRUE if the input stream is full
+ */
 inline BOOLEAN isRxFull(stUart *pUart)
 {
   return isFull(&hartUart.rxFifo);
 }
-//
+
+/*
+ * \function isTxEmpty
+ * Returns TRUE if the output stream is empty
+ */
 inline BOOLEAN isTxEmpty(stUart *pUart)
 {
   return isEmpty(&hartUart.txFifo);
 }
+
+/*
+ * \function isTxFull
+ * Returns TRUE if the output stream is full
+ */
 inline BOOLEAN isTxFull(stUart *pUart)
 {
   return isFull(&hartUart.txFifo);
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: disableTxIntr()
-//
-// Description:
-//
-// Disables the UART transmit interrupt
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void disableTxIntr(void)
+/*
+ * \function disableHartTxInter
+ * Disable Hart serial transmit interrupt -
+ */
+inline void disableHartTxIntr(void)
 {
-  HART_IE &= ~UCTXIE;                // disable USCI_A0 RX interrupt
+  UCA1IE &= ~UCTXIE;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: enableTxIntr()
-//
-// Description:
-//
-// Enables the UART transmit interrupt
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void enableTxIntr(void)
+/*
+ * \function enableHartTxInter
+ * Enable Hart transmit serial interrupt -
+ */
+inline void enableHartTxIntr(void)
 {
-  HART_IE |= UCTXIE;                // Enable USCI_A0 RX interrupt
+  UCA1IE |= UCTXIE;
+}
+/*
+ * \function disableHartRxInter
+ * Disable Hart serial transmit interrupt -
+ */
+inline void disableHartRxIntr(void)
+{
+  UCA1IE &= ~UCRXIE;
 }
 
-
+/*
+ * \function enableHartTxInter
+ * Enable Hart transmit serial interrupt -
+ */
+inline void enableHartRxIntr(void)
+{
+  UCA1IE |= UCRXIE;
+}
 
 #endif /* DRIVERHUART_H_ */

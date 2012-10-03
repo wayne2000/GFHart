@@ -76,8 +76,8 @@ BYTE getFifo(stFifo *pFifo)
 {
   if (pFifo->currentLength != 0)
   {
-    BYTE tmp = pFifo->buffer[pFifo->readIndex];
-    if (++pFifo->readIndex >= pFifo->maxLength)
+    BYTE tmp = pFifo->buffer[pFifo->readIndex++];
+    if (pFifo->readIndex >= pFifo->maxLength)
       pFifo->readIndex = 0;
     pFifo->currentLength--;
     return tmp;
