@@ -1,0 +1,5 @@
+*.pp
+*.mk
+*.map
+*.out
+*.obj

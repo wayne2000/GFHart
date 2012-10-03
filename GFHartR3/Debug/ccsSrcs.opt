@@ -1,0 +1,1 @@
+"../driverUart.c" "../fifo.c" "../hardware.c" "../hartMain.c" 
