@@ -63,6 +63,11 @@
 #define HART_UART_TX_MASK   0x10
 #define HART_UART_RX_MASK   0x20
 
+// HArt Uart Tx control (RTS) line HI= Driver disable
+#define HART_UART_TXCTRL_PORTOUT  P4OUT
+#define HART_UART_TXCTRL_PORTSEL  P4SEL
+#define HART_UART_TXCTRL_PORTDIR  P4DIR
+#define HART_UART_TXCTRL_MASK   0x01
 
 // Definitions from msp430x.h not found in CCS
 #define P1OUT_              (0x0202u)  /* Port 1 Output */

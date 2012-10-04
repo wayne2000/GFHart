@@ -204,10 +204,17 @@ void initHardware(void)
   P1IES &= ~(BIT2|BIT3);  // lo->hi transition (for now)
   P1IFG &= ~(BIT2|BIT3);  // clear IFG in case it's set
 
+  // Hart Transmit control
+  HART_UART_TXCTRL_PORTSEL |= HART_UART_TXCTRL_MASK;    // Make sure pin is GPIO out
+  HART_UART_TXCTRL_PORTDIR |= HART_UART_TXCTRL_MASK;
+  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;    // app disableHartTxDriver();   // Put Modem Line in listen mode
+
+#if 0
   // P4.0 is the RTS output signal, P2.1 is the modem RST\ signal
   P4SEL &= ~BIT0;
   P4DIR |= BIT0;
   P4OUT |= BIT0;
+#endif
 
   // Hart Uart Pins
   HART_UART_PORTSEL |= HART_UART_RX_MASK | HART_UART_TX_MASK;
@@ -279,13 +286,13 @@ static void toggleRtsLine()
   {
     if (idleCount > 0xf)
     {
-        rtsRcv();
+        disableHartTxDriver();
         ++idleCount_1;
     }
     else
     {
         ++idleCount;
-        rtsXmit();
+        enableHartTxDriver();
     }
     if (idleCount_1 > 0xf)
     {
@@ -298,7 +305,7 @@ static void toggleRtsLine()
         second_round = 1;
     }
   }
-  rtsRcv(); // make sure rts is in receive mode
+  disableHartTxDriver(); // make sure rts is in receive mode
   idleCount =0;
   P1IFG &= ~(BIT2|BIT3); // clear the DCD flags just in case they've been set
   while(idleCount < 0x2ff) //0x9ff) //0xfff)

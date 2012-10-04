@@ -27,49 +27,23 @@ void initHardware(void);            //!< Initialize Peripherals for the Hart App
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: rtsRcv()
-//
-// Description:
-//
-// Set the RTS line high (receive mode)
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void rtsRcv(void)
+/*!
+ *  \function disableHartTxDriver()
+ *  Put the hart modem in listen mode
+ */
+inline void disableHartTxDriver(void)
 {
-    P4OUT |= BIT0;
-}
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: rtsXmit()
-//
-// Description:
-//
-// Pull the RTS line low (xmit mode)
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void rtsXmit(void)
-{
-  P4OUT &= ~BIT0;
+  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;
 }
 
+/*!
+ *  \function enableHartTxDriver()
+ *  Put the hart modem in talk mode
+ */
+inline void enableHartTxDriver(void)
+{
+  HART_UART_TXCTRL_PORTOUT &= ~HART_UART_TXCTRL_MASK;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

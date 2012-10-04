@@ -65,6 +65,10 @@ typedef union uByteFloat
 #define EOF    -1
 #endif
 #define NEWLINE '\n'    /* End of line terminator */
+#ifndef NULL
+#define NULL (0L)
+#endif
+
 
 /* macro expressions */
 #define DIM(x)  ((int)(sizeof(x) / sizeof(x[0])))

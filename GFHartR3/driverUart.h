@@ -46,12 +46,25 @@ typedef struct
   const WORD nRxBufSize, nTxBufSize;    //!< Internal buffer sizes
   void (*initUcsi)(void);               //!< Function to initialize msp Uart
   int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
+  void (*rxInterruptEnable)(void);      //!< Enable Rx interrupt
+  void (*rxInterruptDisable)(void);     //!< Disable Rx interrupt
+  void (*txInterruptEnable)(void);      //!< Enable Tx interrupt
+  void (*txInterruptDisable)(void);     //!< Disable Tx interrupt
+  BOOLEAN (*isTxIntrEnabled)(void);     //!< Retrieve Tx interrupt status
+  void (*txChar)(BYTE);                 //!< Bypass Fifo to speed up transmitt
+
+  // These are 485 type members
+  void (*txEnable)(void);               //!< Enable Tx Driver
+  void (*txDisable)(void);              //!< Disable Tx Driver
+
   stFifo rxFifo, txFifo;                // Input and Output streams
   // Status flags
   volatile BOOLEAN
               bRxError,                 //!< A global error in Rx = cancel current Frame
               bNewRxChar,               //!< New Char has arrived
-              bRxFifoOverrun;           //!< Fifo overrun indicator
+              bUsciTxBufEmpty,          //!< Status of Serial buffer to control chained Tx isrs
+              bRxFifoOverrun,           //!< Fifo overrun indicator
+              bTxDriveEnable;           //!< Indicates TxMode in Half-Duplex, TRUE in Full-Duplex
 } stUart;
 
 
@@ -135,6 +148,24 @@ inline void enableHartTxIntr(void)
 {
   UCA1IE |= UCTXIE;
 }
+
+/*
+ * \function enableHartTxInter
+ * Enable Hart transmit serial interrupt -
+ */
+inline BOOLEAN isHartTxIntrEnabled(void)
+{
+  return (UCA1IE & UCTXIE) ? TRUE : FALSE;
+}
+/*
+ * \function txCharr
+ * Just an abstraction of the TXSBUF
+ */
+inline void hartTxChar(BYTE ch)
+{
+  UCA1TXBUF = ch;
+}
+
 /*
  * \function disableHartRxInter
  * Disable Hart serial transmit interrupt -

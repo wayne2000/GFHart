@@ -45,7 +45,21 @@ stSerialStatus HartUartCharStatus;      //!<    the status of UartChar
 stSerialStatus SerialStatus;            //!<    a running summary of the UART
 //
 //  Let the compiler do the pointer setting
-stUart   hartUart = {HartRxFifoLen, HartTxFifoLen, initHartUart, hartRxfifoBuffer, hartTxfifoBuffer};
+stUart
+  hartUart =
+  {
+    HartRxFifoLen, HartTxFifoLen,           // Buffer lengths (defines)
+    initHartUart,                           // points to msp430 init
+    hartRxfifoBuffer, hartTxfifoBuffer,     // static allocation
+    enableHartRxIntr, disableHartRxIntr,    // Rx Interrupt enable/disable inlines
+    enableHartTxIntr, disableHartTxIntr,    // Tx Interrupt enable/disable inlines
+    isHartTxIntrEnabled,                    // TRUE if Tx is enabled
+    hartTxChar,                             // Routine writes to TXBUF when TxFifo & TXBUF empty
+    //  485, Tx Control
+    enableHartTxDriver, disableHartTxDriver // pointers to void func(void) that enables and disables Tx Driver
+                                            // declare both NULL if no function used (rs232, rs422, etc)
+  },
+  hsbUart;
 
 //==============================================================================
 //  LOCAL DATA
@@ -115,7 +129,9 @@ BOOLEAN initUart(stUart *pUart)
   pUart->bRxError = FALSE;
   pUart->bNewRxChar = FALSE;
   pUart->bRxFifoOverrun = FALSE;
-
+  pUart->bUsciTxBufEmpty = TRUE;
+  pUart->bTxDriveEnable = FALSE;
+  disableHartTxDriver();
   //
   //  Configure the msp ucsi for odd parity 1200 bps
   pUart->initUcsi(); //
@@ -204,26 +220,25 @@ __interrupt void hartSerialIsr(void)
     if(!isRxFull(&hartUart))
     {
       putFifo(&hartUart.rxFifo, data);
-      hartUart.bNewRxChar = TRUE;       // Signal an Event to main loop
+      hartUart.bNewRxChar = TRUE;           // Signal an Event to main loop
     }
     else
-      hartUart.bRxFifoOverrun = TRUE;   // Receiver Fifo overrun!!
+      hartUart.bRxFifoOverrun = TRUE;       // Receiver Fifo overrun!!
 
     break;
   case 4:                                   // Vector 4 - TXIFG
-    // Reenable interrupts so a higher priority interrupt can run if necessary
-    //!MH No longer this _bis_SR_register(GIE);
     // Disable the Tx interrupt
-    disableHartTxIntr();                // !MH avoids recursion
-    // !MH REMOVE Call the transmit ISR txIsr();    <<<<========= Working HERE
     if(!isTxEmpty(&hartUart))
     {
       UCA1TXBUF = getFifo(&hartUart.txFifo);
       hartTxFifoEmpty = FALSE;
     }
     else
-      hartTxFifoEmpty = TRUE;   //!MH We need to generate and event-timer to release RTS line
-                                // where are the timers??
+    {
+        //TODO:  More informative is after tx is complete
+        hartUart.bUsciTxBufEmpty = TRUE;   // Control the Tx isr - Generate a Time-out to release RTS line
+        // releaseHartTx()
+    }
     break;
   default:
     break;
@@ -234,25 +249,39 @@ __interrupt void hartSerialIsr(void)
  * \function  putcUart(BYTE ch, stUart *pUart)
  * Put a character into the output stream
  *
- * If the output stream is full, the routine waits for an empty position
+ * If the output stream is full, the routine waits for an empty position. If the ostream
+ * and Transmit register are empty, rotuine writes direct to transmit register.
+ *
  *
  * \param ch  is the byte to be sent to the output stream
  * \param *pUart is the Uart's fifo
  *
  * \return  TRUE if character goes into the output stream
  */
-//===================================================================================================
-///
-/// putcUart(BYTE ch, stUart *pUart)
-///
-///
 BOOLEAN putcUart(BYTE ch, stUart *pUart)
 {
   BOOLEAN sent = FALSE;
-  while (isFull(&pUart->txFifo));        // wait until there is room in the fifo (turn OFF power?)
+  while (isFull(&pUart->txFifo));       // wait until there is room in the fifo (is it worth to turn OFF power?)
+  //  First Tx controls the TxDriver line
+  if(pUart->txEnable != NULL &&         // this UART need Tx control
+      !pUart->bTxDriveEnable)           // and its Driver is not enabled
+  {
+    pUart->bTxDriveEnable = TRUE;       // Raise the TxMode Flag
+    pUart->txEnable();                  // CAll the actual function
+  }
   // Lock the TxFifo
   __disable_interrupt();
-  sent = putFifo(&pUart->txFifo, ch);
+  if(pUart->bUsciTxBufEmpty && isEmpty(&pUart->txFifo))
+  {
+      pUart->txChar(ch);
+      pUart->bUsciTxBufEmpty = FALSE;
+  }
+  else
+    sent = putFifo(&pUart->txFifo, ch);   // Write through the buffer
+  pUart->bUsciTxBufEmpty = FALSE;         // TXSBUF has a char pending to be shifted out
+  // Writting to SBUF clears the TXIF. It will be set again when SBUF moves to shift register
+  if(!pUart->isTxIntrEnabled())           // If TxIntr not enabled, enable it for this frame
+    pUart->txInterruptEnable();
   __enable_interrupt();
 
   return sent;

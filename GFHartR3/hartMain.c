@@ -62,7 +62,8 @@ void initSystem(void)
 {
   initHardware();       //!<  Initialize clock system, GPIO, timers and peripherals
   initUart(&hartUart);
-  //
+  // last setup of peripheral interrupts
+  disableHartTxIntr();
   enableHartRxIntr();
 }
 
@@ -93,7 +94,7 @@ etEvents waitForEvent()
 }
 
 #define BUFSIZE 50
-void main(void)
+void main()
 {
   volatile unsigned int i;
   low_power =1;
@@ -105,6 +106,7 @@ void main(void)
     ch[i]=0;
   i=0;
   char rxisr=0, rxapi=0, data=0, dget=0;
+  char txisr=0, txapi=0, sbuf=0;
 
   while(1)                                  // continuous loop
   {
@@ -116,6 +118,14 @@ void main(void)
       if(rxapi)
         dget= getcUart(&hartUart);
 
+      // Simulate TX isr
+      if(txapi) //
+        //if(!isTxFull(&hartUart))      /* protect from "wait for empty" */
+          putcUart(++data, &hartUart);  // Inc and send
+      if(txisr)                         // generate an interrupt
+        if(!isEmpty(&hartUart.txFifo))  // we ask for the fifo status (ISR level)
+          sbuf = getFifo(&hartUart.txFifo);
+          // else rxFifo OverRun
 
 #if 0
       if(!isRxEmpty(&hartUart))
