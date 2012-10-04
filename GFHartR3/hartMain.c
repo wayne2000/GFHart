@@ -104,15 +104,17 @@ void main(void)
   for(i=0; i< BUFSIZE; ++i)
     ch[i]=0;
   i=0;
-  char rx=0, tx=0, data=0, dget=0;
+  char rxisr=0, rxapi=0, data=0, dget=0;
 
   while(1)                                  // continuous loop
   {
-      if(rx)
-        dget = getcUart(&hartUart);
-      if(tx)
-        putcUart(++data,&hartUart);
-
+      // Simulate RX isr
+      if(rxisr)
+        if(!isFull(&hartUart.rxFifo))
+          putFifo(&hartUart.rxFifo, ++data);
+          // else rxFifo OverRun
+      if(rxapi)
+        dget= getcUart(&hartUart);
 
 
 #if 0
