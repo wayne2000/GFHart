@@ -24,12 +24,28 @@ typedef signed   long int       SLWORD;
 typedef unsigned char int8u;
 typedef unsigned int int16u;
 
+/*!
+ * \union  fp32
+ * A type that easy conversion of FP -> hex
+ *
+ */
 typedef union uByteFloat
 {
     float floatVal;
     int8u byteVal[4]; // Allows easy conversion of FP -> hex
 } fp32;
 
+/*!
+ * \struct  stFuncCtrl
+ * Structure enable, disable and get status of a given feature
+ *
+ */
+typedef struct
+{
+  void (*enable)(void);         //!< Enable feature
+  void (*disable)(void);        //!< Disable feature
+  BOOLEAN (*isEnabled)(void);   //!< Request feature status
+} stFuncCtrl;
 
 
 /* Boolean definitions */

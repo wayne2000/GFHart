@@ -27,23 +27,6 @@ void initHardware(void);            //!< Initialize Peripherals for the Hart App
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
-/*!
- *  \function disableHartTxDriver()
- *  Put the hart modem in listen mode
- */
-inline void disableHartTxDriver(void)
-{
-  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;
-}
-
-/*!
- *  \function enableHartTxDriver()
- *  Put the hart modem in talk mode
- */
-inline void enableHartTxDriver(void)
-{
-  HART_UART_TXCTRL_PORTOUT &= ~HART_UART_TXCTRL_MASK;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

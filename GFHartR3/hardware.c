@@ -205,7 +205,7 @@ void initHardware(void)
   P1IFG &= ~(BIT2|BIT3);  // clear IFG in case it's set
 
   // Hart Transmit control
-  HART_UART_TXCTRL_PORTSEL |= HART_UART_TXCTRL_MASK;    // Make sure pin is GPIO out
+  HART_UART_TXCTRL_PORTSEL &= ~HART_UART_TXCTRL_MASK;    // Make sure pin is GPIO out
   HART_UART_TXCTRL_PORTDIR |= HART_UART_TXCTRL_MASK;
   HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;    // app disableHartTxDriver();   // Put Modem Line in listen mode
 
@@ -218,6 +218,7 @@ void initHardware(void)
 
   // Hart Uart Pins
   HART_UART_PORTSEL |= HART_UART_RX_MASK | HART_UART_TX_MASK;
+  HART_UART_PORTDIR |= HART_UART_TX_MASK;
   HART_UART_PORTDS  |= HART_UART_TX_MASK;       // Full output drive strength in TX
 
 
@@ -249,7 +250,7 @@ void initHardware(void)
   // Set VCore
   INIT_set_Vcore(PMMCOREV_0);
   //
-  initTimers();
+  // initTimers(); no timers now
 
   //USE_PMM_CODE
   INIT_SVS_supervisor();

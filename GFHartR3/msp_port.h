@@ -59,6 +59,7 @@
 
 //  Hart Uart
 #define HART_UART_PORTSEL  P4SEL
+#define HART_UART_PORTDIR  P4DIR
 #define HART_UART_PORTDS   P4DS
 #define HART_UART_TX_MASK   0x10
 #define HART_UART_RX_MASK   0x20

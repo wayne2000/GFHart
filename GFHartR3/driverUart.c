@@ -16,10 +16,10 @@
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
-#define HartRxFifoLen   4
-#define HartTxFifoLen   6
-#define HsbRxFifoLen    128
-#define HsbTxFifoLen    16
+#define HartRxFifoLen   64
+#define HartTxFifoLen   32
+#define HsbRxFifoLen    64
+#define HsbTxFifoLen    32
 
 // Parity settings
 #define PARITY_NONE 0
@@ -36,7 +36,6 @@ extern BYTE hartRxfifoBuffer[], hartTxfifoBuffer[]; // defined bellow
 //  GLOBAL DATA
 //==============================================================================
 BOOLEAN     HartRxCharError;            //!< The most current received data has error
-BOOLEAN     hartTxFifoEmpty;
 BOOLEAN     hartRxFrameError,           //!<  The serial isr receiver has detected errors in present serial frame
             hartNewCharInRxFifo,        //!<  New character has been moved to the Hart receiver fifo
             HartRxFifoError;            //!<  Indicates a problem in the whole Hart Receiver Fifo (overrun)
@@ -51,13 +50,15 @@ stUart
     HartRxFifoLen, HartTxFifoLen,           // Buffer lengths (defines)
     initHartUart,                           // points to msp430 init
     hartRxfifoBuffer, hartTxfifoBuffer,     // static allocation
-    enableHartRxIntr, disableHartRxIntr,    // Rx Interrupt enable/disable inlines
-    enableHartTxIntr, disableHartTxIntr,    // Tx Interrupt enable/disable inlines
-    isHartTxIntrEnabled,                    // TRUE if Tx is enabled
+    //  Rx Interrupt Handlers
+        {enableHartRxIntr,disableHartRxIntr,isHartRxIntrEnabled},
+    //  Tx Interrupt Handlers
+        {enableHartTxIntr,disableHartTxIntr,isHartTxIntrEnabled},
+    //  Tx Driver
+        {enableHartTxDriver,disableHartTxDriver,isEnabledHartTxDriver}, // NULL if no function used
+
     hartTxChar,                             // Routine writes to TXBUF when TxFifo & TXBUF empty
-    //  485, Tx Control
-    enableHartTxDriver, disableHartTxDriver // pointers to void func(void) that enables and disables Tx Driver
-                                            // declare both NULL if no function used (rs232, rs422, etc)
+
   },
   hsbUart;
 
@@ -131,10 +132,9 @@ BOOLEAN initUart(stUart *pUart)
   pUart->bRxFifoOverrun = FALSE;
   pUart->bUsciTxBufEmpty = TRUE;
   pUart->bTxDriveEnable = FALSE;
-  disableHartTxDriver();
-  //
-  //  Configure the msp ucsi for odd parity 1200 bps
-  pUart->initUcsi(); //
+  pUart->bHalfDuplex = TRUE;
+  pUart->hTxDriver.disable();
+  pUart->initUcsi();              //  Configure the msp ucsi for odd parity 1200 bps
   return TRUE;
 }
 
@@ -204,41 +204,44 @@ static void initMainUart(void)
 #pragma vector=USCI_A1_VECTOR
 __interrupt void hartSerialIsr(void)
 {
+  static BOOLEAN TxCompleted = FALSE;
   _no_operation(); // recommended by TI errata
   //_enable_interrupts();
-  volatile BYTE data;
+  volatile BYTE data, status;
   switch(__even_in_range(UCA1IV,4))
   {
   case 0:
     break;                                  // Vector 0 - no interrupt
   case 2:                                   // Vector 2 - RXIFG
-    //!MH: REMOVE process the character rxIsr();
-    // get the character's status
-    if(UCA1STAT & UCRXERR & UCBRK)          //  Any (FE PE OE) error or BREAK detected?
-      hartUart.bRxError = TRUE;
-    data = UCA1RXBUF;                       //  clear the RX interrupt flag and UCRXERR status flag
-    if(!isRxFull(&hartUart))
+    status = UCA1STAT;
+    data = UCA1RXBUF;                       // read & clears the RX interrupt flag and UCRXERR status flag
+    if(hartUart.bTxMode)                    // Ignore everything but last char
     {
-      putFifo(&hartUart.rxFifo, data);
-      hartUart.bNewRxChar = TRUE;           // Signal an Event to main loop
+      if(TxCompleted)   // This is the reception of last Txmitted
+      {
+        hartUart.hTxDriver.disable();             // Disable the Tx Driver
+        hartUart.bTxMode = TxCompleted = FALSE;   // Done
+      }
     }
     else
+    if(status & UCRXERR & UCBRK)            //  Any (FE PE OE) error or BREAK detected?
+        hartUart.bRxError = TRUE;           //  ==> power save ==> discard current frame
+    else
+    if(!isRxFull(&hartUart))                //  put data in input stream if no errors
+      hartUart.bNewRxChar = putFifo(&hartUart.rxFifo, data);  // Signal an Event to main loop
+    else
       hartUart.bRxFifoOverrun = TRUE;       // Receiver Fifo overrun!!
-
     break;
+
   case 4:                                   // Vector 4 - TXIFG
-    // Disable the Tx interrupt
     if(!isTxEmpty(&hartUart))
     {
       UCA1TXBUF = getFifo(&hartUart.txFifo);
-      hartTxFifoEmpty = FALSE;
+      if(hartUart.bHalfDuplex && isTxEmpty(&hartUart))
+        TxCompleted = TRUE;             // Signal receiver to
     }
     else
-    {
-        //TODO:  More informative is after tx is complete
-        hartUart.bUsciTxBufEmpty = TRUE;   // Control the Tx isr - Generate a Time-out to release RTS line
-        // releaseHartTx()
-    }
+      hartUart.hTxInter.disable();        // Done with interrupts for this frame
     break;
   default:
     break;
@@ -250,38 +253,31 @@ __interrupt void hartSerialIsr(void)
  * Put a character into the output stream
  *
  * If the output stream is full, the routine waits for an empty position. If the ostream
- * and Transmit register are empty, rotuine writes direct to transmit register.
+ * and Transmit register are empty, routine writes direct to transmit register.
  *
  *
  * \param ch  is the byte to be sent to the output stream
  * \param *pUart is the Uart's fifo
  *
- * \return  TRUE if character goes into the output stream
+ * \return  TRUE if character goes into the output stream or direct to txbuf
  */
 BOOLEAN putcUart(BYTE ch, stUart *pUart)
 {
   BOOLEAN sent = FALSE;
   while (isFull(&pUart->txFifo));       // wait until there is room in the fifo (is it worth to turn OFF power?)
-  //  First Tx controls the TxDriver line
-  if(pUart->txEnable != NULL &&         // this UART need Tx control
-      !pUart->bTxDriveEnable)           // and its Driver is not enabled
-  {
-    pUart->bTxDriveEnable = TRUE;       // Raise the TxMode Flag
-    pUart->txEnable();                  // CAll the actual function
-  }
+
   // Lock the TxFifo
   __disable_interrupt();
-  if(pUart->bUsciTxBufEmpty && isEmpty(&pUart->txFifo))
+  //  Handle the TxDriver && TxMode if HalfDuplex Mode
+  if(pUart->bHalfDuplex)
   {
-      pUart->txChar(ch);
-      pUart->bUsciTxBufEmpty = FALSE;
+    pUart->bTxMode = TRUE;
+    pUart->hTxDriver.enable();            // enable it now
   }
-  else
-    sent = putFifo(&pUart->txFifo, ch);   // Write through the buffer
-  pUart->bUsciTxBufEmpty = FALSE;         // TXSBUF has a char pending to be shifted out
-  // Writting to SBUF clears the TXIF. It will be set again when SBUF moves to shift register
-  if(!pUart->isTxIntrEnabled())           // If TxIntr not enabled, enable it for this frame
-    pUart->txInterruptEnable();
+  sent = putFifo(&pUart->txFifo, ch);     // Write through the buffer
+  // Handle the Tx Interrupt control
+  if(!pUart->hTxInter.isEnabled())        // If TxIntr not enabled, enable it for this frame
+    pUart->hTxInter.enable();
   __enable_interrupt();
 
   return sent;
@@ -305,4 +301,88 @@ BYTE getcUart(stUart *pUart)
   return ch;
 }
 
+// Remove inlines
+
+/*
+ * \function disableHartRxInter
+ * Disable Hart serial transmit interrupt -
+ */
+void disableHartRxIntr(void)
+{
+  UCA1IE &= ~UCRXIE;
+}
+/*
+ * \function enableHartRxInter
+ * Enable Hart transmit serial interrupt -
+ */
+/*inline*/ void enableHartRxIntr(void)
+{
+  UCA1IE |= UCRXIE;
+}
+/*
+ * \function isHartRxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+/*inline*/ BOOLEAN isHartRxIntrEnabled(void)
+{
+  return (UCA1IE & UCRXIE) ? TRUE : FALSE;
+}
+
+/*
+ * \function disableHartTxInter
+ * Disable Hart serial transmit interrupt -
+ */
+/*inline*/ void disableHartTxIntr(void)
+{
+  UCA1IE &= ~UCTXIE;
+}
+/*
+ * \function enableHartTxInter
+ * Enable Hart transmit serial interrupt -
+ */
+/*inline*/ void enableHartTxIntr(void)
+{
+  UCA1IE |= UCTXIE;
+}
+/*
+ * \function isHartTxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+/*inline*/ BOOLEAN isHartTxIntrEnabled(void)
+{
+  return (UCA1IE & UCTXIE) ? TRUE : FALSE;
+}
+//////// TxDriver
+/*!
+ *  \function disableHartTxDriver()
+ *  Put the hart modem in listen mode
+ */
+/*inline*/ void disableHartTxDriver(void)
+{
+  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;
+}
+/*!
+ *  \function enableHartTxDriver()
+ *  Put the hart modem in talk mode
+ */
+/*inline*/ void enableHartTxDriver(void)
+{
+  HART_UART_TXCTRL_PORTOUT &= ~HART_UART_TXCTRL_MASK;
+}
+/*
+ * \function isHartTxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+/*inline*/ BOOLEAN isEnabledHartTxDriver(void)
+{
+  return (HART_UART_TXCTRL_PORTOUT & HART_UART_TXCTRL_MASK) ? FALSE : TRUE;  // 1= Disabled
+}
+/*
+ * \function hartTxChar
+ * Just an abstraction of the TXSBUF
+ */
+/*inline*/ void hartTxChar(BYTE ch)
+{
+  UCA1TXBUF = ch;
+}
 

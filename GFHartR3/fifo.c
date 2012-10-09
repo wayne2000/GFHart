@@ -2,7 +2,7 @@
  * fifo.c
  *
  *  Created on: Oct 1, 2012
- *      Author: marco
+ *      Author: marco henry
  */
 //==============================================================================
 //  INCLUDES

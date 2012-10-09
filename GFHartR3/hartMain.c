@@ -93,48 +93,34 @@ etEvents waitForEvent()
   return this;
 }
 
-#define BUFSIZE 50
+// #define BUFSIZE 50
 void main()
 {
   volatile unsigned int i;
   low_power =1;
   //CLEARB(TP_PORTOUT, TP1_MASK);  // Indicate we are running
   initSystem();
+  // This a Debug test only
+  hartUart.bHalfDuplex = TRUE;
+  hartUart.hRxInter.enable();
+  // hartUart.hTxInter.enable(); // There is no need to enable TxInterr as is setup auto in putc, and clear in isr
+
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
-  BYTE ch[BUFSIZE];
-  for(i=0; i< BUFSIZE; ++i)
-    ch[i]=0;
+  BYTE ch= 'A';
   i=0;
-  char rxisr=0, rxapi=0, data=0, dget=0;
-  char txisr=0, txapi=0, sbuf=0;
-
-  while(1)                                  // continuous loop
+  while(1)													// continuous loop
   {
-      // Simulate RX isr
-      if(rxisr)
-        if(!isFull(&hartUart.rxFifo))
-          putFifo(&hartUart.rxFifo, ++data);
-          // else rxFifo OverRun
-      if(rxapi)
-        dget= getcUart(&hartUart);
-
-      // Simulate TX isr
-      if(txapi) //
-        //if(!isTxFull(&hartUart))      /* protect from "wait for empty" */
-          putcUart(++data, &hartUart);  // Inc and send
-      if(txisr)                         // generate an interrupt
-        if(!isEmpty(&hartUart.txFifo))  // we ask for the fifo status (ISR level)
-          sbuf = getFifo(&hartUart.txFifo);
-          // else rxFifo OverRun
-
-#if 0
-      if(!isRxEmpty(&hartUart))
+    if(hartUart.bNewRxChar)
     {
-      // Get the char
-        if(i<BUFSIZE)
-          ch[i++] = getFifo(&hartUart.rxFifo);
+      hartUart.bNewRxChar = FALSE;
+      ch= getcUart(&hartUart);
     }
-#endif
+    if(++i >40000u)		// Trigger with any number <>0
+    {
+    	i=0;
+      for(ch='A'; ch <='C'; ++ch)
+        putcUart(ch,&hartUart);
+    }
 
   }
 }

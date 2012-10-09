@@ -43,31 +43,30 @@ typedef enum
 
 typedef struct
 {
+  // Initialized Members - Mostly constants
   const WORD nRxBufSize, nTxBufSize;    //!< Internal buffer sizes
   void (*initUcsi)(void);               //!< Function to initialize msp Uart
   int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
-  void (*rxInterruptEnable)(void);      //!< Enable Rx interrupt
-  void (*rxInterruptDisable)(void);     //!< Disable Rx interrupt
-  void (*txInterruptEnable)(void);      //!< Enable Tx interrupt
-  void (*txInterruptDisable)(void);     //!< Disable Tx interrupt
-  BOOLEAN (*isTxIntrEnabled)(void);     //!< Retrieve Tx interrupt status
+
+  const stFuncCtrl
+              hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers
+              hTxDriver;                //!<  Tx driver (RTS) (off when bit ==1)
+
   void (*txChar)(BYTE);                 //!< Bypass Fifo to speed up transmitt
 
-  // These are 485 type members
-  void (*txEnable)(void);               //!< Enable Tx Driver
-  void (*txDisable)(void);              //!< Disable Tx Driver
-
+  // Dynamic members
   stFifo rxFifo, txFifo;                // Input and Output streams
+
   // Status flags
   volatile BOOLEAN
               bRxError,                 //!< A global error in Rx = cancel current Frame
               bNewRxChar,               //!< New Char has arrived
-              bUsciTxBufEmpty,          //!< Status of Serial buffer to control chained Tx isrs
+              bHalfDuplex,              //!< Half-full duplex mode
+              bUsciTxBufEmpty,          //!< Status of msp430 Serial buffer (write direct to txsbuf)
+              bTxMode,                  //!< When Half Duplex, ignore Rx characters but last one
               bRxFifoOverrun,           //!< Fifo overrun indicator
               bTxDriveEnable;           //!< Indicates TxMode in Half-Duplex, TRUE in Full-Duplex
 } stUart;
-
-
 
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
@@ -76,6 +75,22 @@ BOOLEAN initUarts();                        //!< Initialize Hart 1200,odd,8,1 an
 BOOLEAN putcUart(BYTE ch, stUart *pUart);   //!<  Put a BYTE into output stream
 BYTE getcUart(stUart *pUart);               //!<  Get a BYTE from the input stream
 BOOLEAN initUart(stUart *pUart);            //!<  Initialize the indicated Uart
+
+extern void enableHartRxIntr(void);
+extern void disableHartRxIntr(void);
+extern BOOLEAN isHartRxIntrEnabled(void);
+
+extern void enableHartTxDriver(void);
+extern void disableHartTxDriver(void);
+extern BOOLEAN isHartTxIntrEnabled(void);
+
+extern void enableHartTxIntr(void);
+extern void disableHartTxIntr(void);
+extern BOOLEAN isEnabledHartTxDriver(void);
+extern void hartTxChar(BYTE ch);
+
+
+
 /*************************************************************************
   *   $GLOBAL VARIABLES
 *************************************************************************/
@@ -88,6 +103,7 @@ extern BOOLEAN  hartRxFrameError,           //!<  The serial isr receiver has de
                 hartTxFifoEmpty;            //!<  The Hart Transmitter Fifo has no more bytes to send (shift reg may still be sending)
 extern stUart   hartUart,
                 hsbUart;
+
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
@@ -130,58 +146,11 @@ inline BOOLEAN isTxFull(stUart *pUart)
   return isFull(&hartUart.txFifo);
 }
 
-
-/*
- * \function disableHartTxInter
- * Disable Hart serial transmit interrupt -
- */
-inline void disableHartTxIntr(void)
-{
-  UCA1IE &= ~UCTXIE;
-}
-
-/*
- * \function enableHartTxInter
- * Enable Hart transmit serial interrupt -
- */
-inline void enableHartTxIntr(void)
-{
-  UCA1IE |= UCTXIE;
-}
-
-/*
- * \function enableHartTxInter
- * Enable Hart transmit serial interrupt -
- */
-inline BOOLEAN isHartTxIntrEnabled(void)
-{
-  return (UCA1IE & UCTXIE) ? TRUE : FALSE;
-}
-/*
- * \function txCharr
- * Just an abstraction of the TXSBUF
- */
-inline void hartTxChar(BYTE ch)
-{
-  UCA1TXBUF = ch;
-}
-
+/////////// Hart Rx, Tx, RxMode //////////////
 /*
  * \function disableHartRxInter
  * Disable Hart serial transmit interrupt -
  */
-inline void disableHartRxIntr(void)
-{
-  UCA1IE &= ~UCRXIE;
-}
 
-/*
- * \function enableHartTxInter
- * Enable Hart transmit serial interrupt -
- */
-inline void enableHartRxIntr(void)
-{
-  UCA1IE |= UCRXIE;
-}
 
 #endif /* DRIVERHUART_H_ */
