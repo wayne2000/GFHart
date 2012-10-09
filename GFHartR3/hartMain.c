@@ -93,36 +93,41 @@ etEvents waitForEvent()
   return this;
 }
 
-// #define BUFSIZE 50
+#define BUFSIZE 50
 void main()
 {
   volatile unsigned int i;
   low_power =1;
-  //CLEARB(TP_PORTOUT, TP1_MASK);  // Indicate we are running
+
   initSystem();
   // This a Debug test only
   hartUart.bHalfDuplex = TRUE;
-  hartUart.hRxInter.enable();
-  // hartUart.hTxInter.enable(); // There is no need to enable TxInterr as is setup auto in putc, and clear in isr
 
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
-  BYTE ch= 'A';
+  BYTE ch= 'A', RxBuf[BUFSIZE], rP=0;
+  for (i=0; i<BUFSIZE ; ++i)
+    RxBuf[i]= 0;
   i=0;
+
+  CLEARB(TP_PORTOUT, TP1_MASK);     // Indicate we are running
   while(1)													// continuous loop
   {
     if(hartUart.bNewRxChar)
     {
       hartUart.bNewRxChar = FALSE;
-      ch= getcUart(&hartUart);
+      if(rP < BUFSIZE)
+        RxBuf[rP++]= getcUart(&hartUart);
     }
-    if(++i >40000u)		// Trigger with any number <>0
+    if(i)
     {
-    	i=0;
-      for(ch='A'; ch <='C'; ++ch)
-        putcUart(ch,&hartUart);
+      BYTE j;
+      for(j=0; j<i; ++j)
+        putcUart(ch++,&hartUart);
+      i=0;
     }
 
   }
+
 }
 
 
