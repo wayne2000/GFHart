@@ -50,7 +50,8 @@ typedef struct
 
   const stFuncCtrl
               hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers
-              hTxDriver;                //!<  Tx driver (RTS) (off when bit ==1)
+              hTxDriver,                //!<  Tx driver (RTS) (off when bit ==1)
+              hLoopBack;                //!<  Feed Tx back to Rx
 
   void (*txChar)(BYTE);                 //!< Bypass Fifo to speed up transmitt
 
@@ -61,7 +62,7 @@ typedef struct
   volatile BOOLEAN
               bRxError,                 //!< A global error in Rx = cancel current Frame
               bNewRxChar,               //!< New Char has arrived
-              bHalfDuplex,              //!< Half-full duplex mode
+              bTxFlowControl,           //!< Tx Requires hardware control \SA Tx handler functions
               bUsciTxBufEmpty,          //!< Status of msp430 Serial buffer (write direct to txsbuf)
               bTxMode,                  //!< When Half Duplex, ignore Rx characters but last one
               bRxFifoOverrun,           //!< Fifo overrun indicator
@@ -76,18 +77,6 @@ BOOLEAN putcUart(BYTE ch, stUart *pUart);   //!<  Put a BYTE into output stream
 BYTE getcUart(stUart *pUart);               //!<  Get a BYTE from the input stream
 BOOLEAN initUart(stUart *pUart);            //!<  Initialize the indicated Uart
 
-extern void enableHartRxIntr(void);
-extern void disableHartRxIntr(void);
-extern BOOLEAN isHartRxIntrEnabled(void);
-
-extern void enableHartTxDriver(void);
-extern void disableHartTxDriver(void);
-extern BOOLEAN isHartTxIntrEnabled(void);
-
-extern void enableHartTxIntr(void);
-extern void disableHartTxIntr(void);
-extern BOOLEAN isEnabledHartTxDriver(void);
-extern void hartTxChar(BYTE ch);
 
 
 
@@ -151,6 +140,109 @@ inline BOOLEAN isTxFull(stUart *pUart)
  * \function disableHartRxInter
  * Disable Hart serial transmit interrupt -
  */
+inline void disableHartRxIntr(void)
+{
+  UCA1IE &= ~UCRXIE;
+}
+/*
+ * \function enableHartRxInter
+ * Enable Hart transmit serial interrupt -
+ */
+inline void enableHartRxIntr(void)
+{
+  UCA1IE |= UCRXIE;
+}
+/*
+ * \function isHartRxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+inline BOOLEAN isHartRxIntrEnabled(void)
+{
+  return (UCA1IE & UCRXIE) ? TRUE : FALSE;
+}
+
+/*
+ * \function disableHartTxInter
+ * Disable Hart serial transmit interrupt -
+ */
+inline void disableHartTxIntr(void)
+{
+  UCA1IE &= ~UCTXIE;
+}
+/*
+ * \function enableHartTxInter
+ * Enable Hart transmit serial interrupt -
+ */
+inline void enableHartTxIntr(void)
+{
+  UCA1IE |= UCTXIE;
+}
+/*
+ * \function isHartTxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+inline BOOLEAN isHartTxIntrEnabled(void)
+{
+  return (UCA1IE & UCTXIE) ? TRUE : FALSE;
+}
+//////// TxDriver
+/*!
+ *  \function disableHartTxDriver()
+ *  Put the hart modem in listen mode
+ */
+inline void disableHartTxDriver(void)
+{
+  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;
+}
+/*!
+ *  \function enableHartTxDriver()
+ *  Put the hart modem in talk mode
+ */
+inline void enableHartTxDriver(void)
+{
+  HART_UART_TXCTRL_PORTOUT &= ~HART_UART_TXCTRL_MASK;
+}
+/*
+ * \function isHartTxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+inline BOOLEAN isEnabledHartTxDriver(void)
+{
+  return (HART_UART_TXCTRL_PORTOUT & HART_UART_TXCTRL_MASK) ? FALSE : TRUE;  // 1= Disabled
+}
+/*
+ * \function hartTxChar
+ * Just an abstraction of the TXSBUF
+ */
+inline void hartTxChar(BYTE ch)
+{
+  UCA1TXBUF = ch;
+}
+//////// TxDriver
+/*!
+ *  \function disableHartTxDriver()
+ *  Put the hart modem in listen mode
+ */
+inline void disableHartLoopBack(void)
+{
+  UCA1STAT &= ~UCLISTEN;
+}
+/*!
+ *  \function enableHartTxDriver()
+ *  Put the hart modem in talk mode
+ */
+inline void enableHartLoopBack(void)
+{
+  UCA1STAT |= UCLISTEN;
+}
+/*
+ * \function isHartTxIntrEnabled
+ * Enable Hart transmit serial interrupt -
+ */
+inline BOOLEAN isEnabledHartLoopBack(void)
+{
+  return (UCA1STAT & UCLISTEN) ? TRUE : FALSE;
+}
 
 
 #endif /* DRIVERHUART_H_ */

@@ -22,7 +22,7 @@ static void toggleRtsLine();
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
-
+volatile WORD SistemTick125mS=0;
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -105,7 +105,7 @@ void checkClock(void)
  *
  * Main clock MCLK source is DCO, maximum permissible 1.048MHz (Low power)
  * DCO stabilized by FLL (as default) using XT1 as the reference clock.
- * ACLK source is XT1 and connected to external 32.768KHz crystal
+ * ACLK source is XT1 and connected to external 32.768KHz crystal (TBD Evaluate LPM0, and if necessary ACLK->LPM3)
  * SMCLK will be used for Uarts and system timers
  * Note:    It takes 775mS to Stabilize
  * \author  MH 9/29/12
@@ -165,9 +165,10 @@ initTimers()
 {
 
   TBCCTL0 = CCIE;     // TRCCR0 interrupt enabled
-  TBCCR0 =  8; // aprox 2mS
-            // 8188; // (2000-1)mS*4.096Khz;   // Tick every 2 secs
-            //40956u;    // (10000-1)mS*4.096Khz;   // Tick every 10 secs
+  TBCCR0 =  508;      // (125-1)mS*4.096Khz;    // System Tick every 125mS
+            //8;      // aprox 2mS
+            // 8188;  // (2000-1)mS*4.096Khz;   // Tick every 2 secs
+            //40956u; // (10000-1)mS*4.096Khz;   // Tick every 10 secs
   TBCTL = TBSSEL_1 |  // TBCLK -> ACLK source
           MC_1 |      // Upmode
           ID_3 |      // TBCLK = ACLK/8 = 4096 Hz
@@ -209,19 +210,10 @@ void initHardware(void)
   HART_UART_TXCTRL_PORTDIR |= HART_UART_TXCTRL_MASK;
   HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;    // app disableHartTxDriver();   // Put Modem Line in listen mode
 
-#if 0
-  // P4.0 is the RTS output signal, P2.1 is the modem RST\ signal
-  P4SEL &= ~BIT0;
-  P4DIR |= BIT0;
-  P4OUT |= BIT0;
-#endif
-
   // Hart Uart Pins
   HART_UART_PORTSEL |= HART_UART_RX_MASK | HART_UART_TX_MASK;
   HART_UART_PORTDIR |= HART_UART_TX_MASK;
   HART_UART_PORTDS  |= HART_UART_TX_MASK;       // Full output drive strength in TX
-
-
 
   // initialize the clock system
   initClock();
@@ -250,7 +242,7 @@ void initHardware(void)
   // Set VCore
   INIT_set_Vcore(PMMCOREV_0);
   //
-  // initTimers(); no timers now
+  initTimers();
 
   //USE_PMM_CODE
   INIT_SVS_supervisor();
@@ -324,7 +316,7 @@ static void toggleRtsLine()
 __interrupt void TIMERB1_ISR(void)
 {
   _no_operation();
-
+  ++SistemTick125mS;
   //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
 
 

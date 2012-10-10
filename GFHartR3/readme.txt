@@ -1,5 +1,10 @@
 //	GF Hart Communication Module - code Rev 3. renew 
-//	10/8/12
+//	10/10/12
+This test program receives chars from terminal -
+Waits for a number N - outputs OK
+If a string "GO" is received it start sending N chars every 125mS
+  
+
 - Basic Clock System prepared for LPM0
 	ACLK  = XT1CLK  =   32.768Khz external crystal
 	MCLK = SMCLK = DCOCLKDIV=  1,058,576
@@ -14,7 +19,10 @@ Emulation won't work well
 Set stack 160->200 - It worked => CCS doen't check stack. Need to estimate and test
 
 === Test with small Modem Board
-- Add LoopBack enable() disable() isEnabled()
-- Return Functions to inline
-- Need to re-enable timer function and create a HW/SW timer
+This
+- Tx and Rx interrupts always enabled
+- Add LoopBack enable() disable() isEnabled() handlers 
+- Loopback is enabled before txsbuf is loaded (this makes Rx listen to all Txmited bytes) 
+- bHalfDuplex -> bHwFlowControl changed names  
+- TODO: Create a HW/SW timer
  

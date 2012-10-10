@@ -100,11 +100,13 @@ void main()
   low_power =1;
 
   initSystem();
+
   // This a Debug test only
-  hartUart.bHalfDuplex = TRUE;
+  hartUart.bTxFlowControl = TRUE;
+  hartUart.hTxInter.enable();
 
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
-  BYTE ch= 'A', RxBuf[BUFSIZE], rP=0;
+  volatile BYTE ch= 'A', RxBuf[BUFSIZE], rP=0,LoadSize=1, echo=0;
   for (i=0; i<BUFSIZE ; ++i)
     RxBuf[i]= 0;
   i=0;
@@ -115,15 +117,41 @@ void main()
     if(hartUart.bNewRxChar)
     {
       hartUart.bNewRxChar = FALSE;
+      i= getcUart(&hartUart);
+      RxBuf[0] = RxBuf[1];
+      RxBuf[1] = i;
+      if (RxBuf[0] == 'G' && RxBuf[1] == 'O')
+        echo =1;
+
+      if (i > '/' && i < ':')
+        LoadSize = i - '0';
+    }
+
+
+#if 0
       if(rP < BUFSIZE)
         RxBuf[rP++]= getcUart(&hartUart);
-    }
-    if(i)
+      else
+        RxBuf[rP=0]= getcUart(&hartUart);
+#endif
+
+    if(echo && SistemTick125mS >= 1)
     {
-      BYTE j;
-      for(j=0; j<i; ++j)
+      SistemTick125mS =0;
+#if 0
+      if(hartUart.hTxDriver.isEnabled())
+        hartUart.hTxDriver.disable();
+      else
+        hartUart.hTxDriver.enable();
+#endif
+
+      for(i=0; i< LoadSize; ++i)
         putcUart(ch++,&hartUart);
-      i=0;
+
+      if(ch > 'Z' )
+        ch = '@';
+
+
     }
 
   }
