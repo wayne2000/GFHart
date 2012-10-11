@@ -1,6 +1,11 @@
 //	GF Hart Communication Module - code Rev 3. renew 
-//	10/10/12
-This test program receives chars from terminal -
+//	10/11/12
+Integrates Hart Receiver state machine - protocols.c
+- copy files from C:\Users\Marco.Ginn\git\Hart\HartFw3 project
+
+- Hart Rx Fifo needs to store status byte
+
+
 Waits for a number N - outputs OK
 If a string "GO" is received it start sending N chars every 125mS
   
@@ -26,3 +31,31 @@ This
 - bHalfDuplex -> bHwFlowControl changed names  
 - TODO: Create a HW/SW timer
  
+ EVENTS:
+ISR Receiver
+ 	eHartRx
+ 	eHartRxError
+
+Timer
+	eRxGapError
+ 	eHartReply
+
+ISR Transmitter
+	opeSendResponse
+	eResponseSent
+	
+HartReceiverSm
+	commands
+		build, NewChar	==> 
+		reset 			==> start over
+		continue
+	results
+		validFrame 		==> A valid message with my address, internal state to xtra data
+		done			==>	a valid message and at least one extra char received (1) 
+		error			==> Error found (1)
+		busy			==>	A receiver is in progress with no errors so far
+		idle			==> Waitting for a valid preamble 
+					(1) Internal state changes to Idle state
+		
+	
+		 	

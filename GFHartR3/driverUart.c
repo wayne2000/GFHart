@@ -66,8 +66,8 @@ stUart
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
-BYTE hartRxfifoBuffer[HartRxFifoLen];    //!< Allocates static memory for Hart Receiver Buffer
-BYTE hartTxfifoBuffer[HartTxFifoLen];    //!< Allocates static memory for Hart Transmitt Buffer
+BYTE hartRxfifoBuffer[HartRxFifoLen*2];   //!< Allocates static memory for Hart Receiver Buffer (data, status)
+BYTE hartTxfifoBuffer[HartTxFifoLen];     //!< Allocates static memory for Hart Transmitt Buffer
 
 //==============================================================================
 // FUNCTIONS
@@ -345,7 +345,7 @@ WORD writeUart(BYTE *pMem, WORD nBytes, stUart *pUart)
 ///
 /// getcUart();
 /// Gets a byte from the indicated input stream. If the Rx fifo is empty, it waits here for data (TBD sleep mode??)
-/// Interrupts are disabled to lock the RxFifo  (assumes interrpts are enabled)
+/// Interrupts are disabled to lock the RxFifo  (assumes interrupts are always enabled)
 ///  \param none
 //  \retval The Oldest BYTE from the RxFifo
 ///
@@ -358,6 +358,22 @@ BYTE getcUart(stUart *pUart)
   _enable_interrupt();
   return ch;
 }
-
+//===================================================================================================
+///
+/// getwUart();
+/// Gets a word from the indicated input stream. If the Rx fifo is empty, it waits here for data (TBD sleep mode??)
+/// Interrupts are disabled to lock the RxFifo  (assumes interrupts are always enabled)
+///  \param none
+//  \retval The Oldest BYTE from the RxFifo
+///
+BYTE getcUart(stUart *pUart)
+{
+  while(isEmpty(&pUart->rxFifo));        // Just wait here until a character arrives
+  //    Critical Zone
+  _disable_interrupt();
+  BYTE ch = getFifo(&pUart->rxFifo);
+  _enable_interrupt();
+  return ch;
+}
 // Remove inlines
 

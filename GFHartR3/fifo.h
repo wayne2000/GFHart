@@ -24,12 +24,17 @@ typedef struct
   WORD  maxLength, currentLength;   //!<    Defines the maximum element length  and current size
 } stFifo;
 
+
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
 // Basic Fifo operations
 BYTE getFifo(stFifo *pFifo);
 BOOLEAN putFifo(stFifo *pFifo, BYTE data);
+
+WORD getWFifo(stFifo *pFifo);
+BOOLEAN putWFifo(stFifo *pFifo, WORD data);
+
 void resetFifo(stFifo *pFifo, BYTE *pBuffer);
 BOOLEAN initFifo(stFifo *pFifo, WORD byteSize);
 

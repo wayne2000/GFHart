@@ -47,7 +47,6 @@ typedef struct
   BOOLEAN (*isEnabled)(void);   //!< Request feature status
 } stFuncCtrl;
 
-
 /* Boolean definitions */
 #define TRUE    1
 #define FALSE   0

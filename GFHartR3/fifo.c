@@ -66,7 +66,7 @@ BOOLEAN putFifo(stFifo *pFifo, BYTE data)
 
 ///
 /// getFifo()
-/// get the oldest element from the indicated Fifo
+/// get the oldest BYTE element from the indicated Fifo
 ///
 /// \param pFifo a pointer to the Fifo
 /// \return the element. Zero if no element (test before calling)
@@ -86,6 +86,51 @@ BYTE getFifo(stFifo *pFifo)
     return '\0';
 
 }
+///
+/// getWFifo()
+/// get the oldest WORD element from the indicated Fifo
+///
+/// \param pFifo a pointer to the Fifo
+/// \return the oldest WORD. Zero if no element (test before calling)
+/// \sa Rev3
+///
+WORD getWFifo(stFifo *pFifo)
+{
+  if (pFifo->currentLength != 0)
+  {
+    WORD *pW = (WORD *)pFifo->buffer;
+    WORD tmp = pW[pFifo->readIndex++];
 
+    if (pFifo->readIndex >= pFifo->maxLength)
+      pFifo->readIndex = 0;
+    pFifo->currentLength--;
+    return tmp;
+  }
+  else
+    return '\0';
+
+}
+///
+/// putWFifo()
+/// put the WORD to the indicated Fifo
+///
+/// \param data is a WORD element to the fifo
+/// \param pFifo a pointer to the Fifo
+/// \return true if element gets into, FALSE if Fifo is full
+/// \sa Rev3
+///
+BOOLEAN putWFifo(stFifo *pFifo, WORD data)
+{
+  if (pFifo->currentLength < pFifo->maxLength)
+  {
+    ((WORD *)pFifo->buffer)[pFifo->writeIndex++] = data;
+    if(pFifo->writeIndex >= pFifo->maxLength)
+      pFifo->writeIndex = 0;
+    pFifo->currentLength++;
+    return TRUE;
+  }
+  else
+    return FALSE;
+}
 
 
