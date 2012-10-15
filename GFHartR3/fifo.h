@@ -32,8 +32,8 @@ typedef struct
 BYTE getFifo(stFifo *pFifo);
 BOOLEAN putFifo(stFifo *pFifo, BYTE data);
 
-WORD getWFifo(stFifo *pFifo);
-BOOLEAN putWFifo(stFifo *pFifo, WORD data);
+WORD getwFifo(stFifo *pFifo);
+BOOLEAN putwFifo(stFifo *pFifo, WORD data);
 
 void resetFifo(stFifo *pFifo, BYTE *pBuffer);
 BOOLEAN initFifo(stFifo *pFifo, WORD byteSize);

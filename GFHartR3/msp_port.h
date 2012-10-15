@@ -70,6 +70,14 @@
 #define HART_UART_TXCTRL_PORTDIR  P4DIR
 #define HART_UART_TXCTRL_MASK   0x01
 
+//	Hart Receiver Dog timers uses TA1
+#define HART_RCV_TIMERS_TR				TA1R				/* Count Value */
+#define HART_RCV_TIMER_CTL				TA1CTL			/* Setup Register */
+#define HART_RCV_GAP_TIMER_CCR		TA1CCR0			/* Compare register for GAP	time */
+#define HART_RCV_GAP_TIMER_CCTL		TA1CCTL0		/* Control register for GAP	*/
+#define HART_RCV_REPLY_TIMER_CCR	TA1CCR1			/* Compare register for Reply time */
+#define HART_RCV_REPLY_TIMER_CCTL	TA1CCTL1		/* Control register for Reply */
+
 // Definitions from msp430x.h not found in CCS
 #define P1OUT_              (0x0202u)  /* Port 1 Output */
 #define P2OUT_              (0x0203u)  /* Port 2 Output */

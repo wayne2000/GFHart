@@ -12,6 +12,7 @@
 #include "msp_port.h"
 #include "hardware.h"
 #include "driverUart.h"
+#include "hartMain.h"
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
@@ -133,7 +134,7 @@ BOOLEAN initUart(stUart *pUart)
   pUart->bRxFifoOverrun = FALSE;
   pUart->bUsciTxBufEmpty = TRUE;
   pUart->bTxDriveEnable = FALSE;
-  pUart->bTxFlowControl = TRUE;
+  pUart->bRtsControl = TRUE;
   pUart->hTxDriver.disable();
   pUart->initUcsi();              //  Configure the msp ucsi for odd parity 1200 bps
   return TRUE;
@@ -210,17 +211,17 @@ __interrupt void hartSerialIsr(void)
 {
   _no_operation(); // recommended by TI errata -VJ (I just left Here MH)
   //
-  volatile BYTE data, status;
+  volatile WORD rxword;
   volatile WORD u =UCA1IV;  // Get the Interrupt source
+  BYTE status;
   switch(u)
   {
   case 0:                                   // Vector 0 - no interrupt
   default:                                  //  or spurious
     break;
   case 2:                                   // Vector 2 - RXIFG
-    SETB(TP_PORTOUT, TP1_MASK);
-    status = UCA1STAT;
-    data = UCA1RXBUF;                       // read & clears the RX interrupt flag and UCRXERR status flag
+  	SETB(TP_PORTOUT, TP1_MASK);
+    rxword = (status = UCA1STAT) << 8 | UCA1RXBUF;    // read & clears the RX interrupt flag and UCRXERR status flag
     //SETB(TP_PORTOUT, TP1_MASK);
     if( hartUart.bTxMode )                  // Loopback interrupt
     {
@@ -237,7 +238,11 @@ __interrupt void hartSerialIsr(void)
         hartUart.bRxError = TRUE;           //  ==> power save ==> discard current frame
     else
     if(!isRxFull(&hartUart))                //  put data in input stream if no errors
-      hartUart.bNewRxChar = putFifo(&hartUart.rxFifo, data);  // Signal an Event to main loop
+    {
+    	hartUart.bNewRxChar = putwFifo(&hartUart.rxFifo, rxword);  // Signal an Event to main loop
+    	SET_SYSTEM_EVENT(evHartRxChar);
+    }
+
     else
       hartUart.bRxFifoOverrun = TRUE;       // Receiver Fifo overrun!!
 
@@ -303,7 +308,7 @@ BOOLEAN putcUart(BYTE ch, stUart *pUart)
   // Lock the TxFifo
   __disable_interrupt();
   //  Handle the TxDriver if Hardware Flow-Control
-  if(pUart->bTxFlowControl)
+  if(pUart->bRtsControl)
     pUart->hTxDriver.enable();                    // enable it now
   if(pUart->bUsciTxBufEmpty && isTxEmpty(pUart))  // Ask if we write direct to SBUF
   {
@@ -366,14 +371,14 @@ BYTE getcUart(stUart *pUart)
 ///  \param none
 //  \retval The Oldest BYTE from the RxFifo
 ///
-BYTE getcUart(stUart *pUart)
+WORD getwUart(stUart *pUart)
 {
   while(isEmpty(&pUart->rxFifo));        // Just wait here until a character arrives
   //    Critical Zone
   _disable_interrupt();
-  BYTE ch = getFifo(&pUart->rxFifo);
+  WORD u = getwFifo(&pUart->rxFifo);
   _enable_interrupt();
-  return ch;
+  return u;
 }
 // Remove inlines
 

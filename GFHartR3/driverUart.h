@@ -62,7 +62,7 @@ typedef struct
   volatile BOOLEAN
               bRxError,                 //!< A global error in Rx = cancel current Frame
               bNewRxChar,               //!< New Char has arrived
-              bTxFlowControl,           //!< Tx Requires hardware control \SA Tx handler functions
+              bRtsControl,           		//!< Tx Requires hardware control \SA Tx handler functions
               bUsciTxBufEmpty,          //!< Status of msp430 Serial buffer (write direct to txsbuf)
               bTxMode,                  //!< When Half Duplex, ignore Rx characters but last one
               bRxFifoOverrun,           //!< Fifo overrun indicator
@@ -74,7 +74,11 @@ typedef struct
 *************************************************************************/
 BOOLEAN initUarts();                        //!< Initialize Hart 1200,odd,8,1 and Hsb uart 19,200,odd,7,1 test memory
 BOOLEAN putcUart(BYTE ch, stUart *pUart);   //!<  Put a BYTE into output stream
+//
+//	Two Implementations for getting data from output stream, use the one
+//	that matches the one used on RXISR (i.e putFifo or putwFifo)
 BYTE getcUart(stUart *pUart);               //!<  Get a BYTE from the input stream
+WORD getwUart(stUart *pUart);								//!<  Get a WORD from the output stream
 BOOLEAN initUart(stUart *pUart);            //!<  Initialize the indicated Uart
 
 

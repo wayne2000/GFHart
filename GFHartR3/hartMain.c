@@ -34,6 +34,7 @@
 #include "hardware.h"
 #include "hartMain.h"
 #include "driverUart.h"
+#include <string.h>
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
@@ -45,7 +46,7 @@ void initSystem(void);
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
-etEvents etSystemEvent;
+unsigned int sEvents[1 + (evLastEvent +1)/16];		// Array where events are stored
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -76,21 +77,35 @@ void initSystem(void)
  *  that can generate an event is the source. If not, we go back to sleep.
  *  If waken up by an event creating interrupt [Note!!! there can be multiple sources at the same time],
  *  I check them as follows:\n
- *  First I check if it was an incoming character, if so I assume an ETP command and add an EVENT_ETP_RX to the execute list.\n
-/// Then I check if it was a telemetry command that completed, if so I add an EVENT_TELEMETRY_COMPLETE to the execute list.\n
-/// Then I check if it was the tick timer that timed out, and if so I move all events that are ripe [ready to execute] to the execute list. \n
-/// Finally I check if it was an impedance sample ready to AD convert, and if so I add an EVENT_IMPEDANCE_SAMPLED to the execute list.
-/// Note!!! that I do this check as the very last one to make sure it gets into the first position of the execute list [items added
-/// to the beginning of the list]
- *
  */
 /// \n
 ///
-etEvents waitForEvent()
+tEvent waitForEvent()
 {
-  etEvents this;
-  while(isRxEmpty(&hartUart));//      p_uart->is_rx_empty()) && all events here
-  return this;
+
+  while(
+  		isRxEmpty(&hartUart) &&
+  		SistemTick125mS < 16 &&
+  		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&
+  		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0
+  		)//  && all conditions that indicates no-event)
+  {
+  	//stop_oscillator();
+  	_no_operation();
+  }
+  //	There is an event Here
+  tEvent event = 0;
+  while(event < evLastEvent)
+  if( IS_SYSTEM_EVENT(event))			// This is a macro
+  {
+  	_disable_interrupt();
+  		CLEAR_SYSTEM_EVENT(event);
+  	_enable_interrupt();
+  	return event;
+  }
+  else
+  	event++;
+  return 0;	// Never happens
 }
 
 #define BUFSIZE 50
@@ -102,7 +117,7 @@ void main()
   initSystem();
 
   // This a Debug test only
-  hartUart.bTxFlowControl = TRUE;
+  hartUart.bRtsControl = TRUE;
   hartUart.hTxInter.enable();
 
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
@@ -112,20 +127,43 @@ void main()
   i=0;
 
   CLEARB(TP_PORTOUT, TP1_MASK);     // Indicate we are running
+  // hartReceiverSm(INIT);
+  tEvent systemEvent;
   while(1)													// continuous loop
   {
-    if(hartUart.bNewRxChar)
-    {
-      hartUart.bNewRxChar = FALSE;
-      i= getcUart(&hartUart);
-      RxBuf[0] = RxBuf[1];
-      RxBuf[1] = i;
-      if (RxBuf[0] == 'G' && RxBuf[1] == 'O')
-        echo =1;
+  	systemEvent = waitForEvent();
+  	switch(systemEvent)
+  	{
+  	case evHartRxChar:
+  		kickDllTimers();							//	GapTimer and Response Timer
+  		ch = getwUart(&hartUart);
+  		RxBuf[2] =	RxBuf[1];
+  		RxBuf[1] = RxBuf[0];
+  		RxBuf[0] = ch;
+  		_no_operation();
+  		// Start "Rec"
+  		if(!strncmp((const char *)RxBuf,"og",2 ))
+  			startGapTimerEvent();
+  		else
+  			if(!strncmp((const char *)RxBuf,"dne",3 ))
+  			{
+  				stopGapTimerEvent();
+  				startReplyTimerEvent();
+  			}
 
-      if (i > '/' && i < ':')
-        LoadSize = i - '0';
-    }
+  		break;
+  	case evHartRcvGapTimeout:
+  		putcUart('g',&hartUart);
+  		break;
+  	case evHartRcvReplyTimer:
+  		putcUart('r',&hartUart);
+  		break;
+  	case evTimerTick:
+  		SistemTick125mS =0;						// every 2 secs we get here
+  		break;
+
+
+  	}
 
 
 #if 0
@@ -180,5 +218,33 @@ case evHartRxChar:
 for(i=5000;i>0;i--);                   // Delay
 //P1OUT ^=0x01;
 
+#endif
+
+#if 0
+  char inisr=0, inget=0, data=0, status =0;
+  WORD rword;
+  while(1)
+  {
+  	if(inisr)			// Simulate a Rxif
+  	if(!isRxFull(&hartUart))                //  put data in input stream if no errors
+  		putwFifo(&hartUart.rxFifo, status <<8 | data);  // Signal an Event to main loop
+  	if(inget)			// Get data
+  		rword = getwUart(&hartUart);  // Signal an Event to main loop
+
+  }
+#endif
+#if 0
+    if(hartUart.bNewRxChar)
+    {
+      hartUart.bNewRxChar = FALSE;
+      i= getwUart(&hartUart);
+      //  Handle events from modules
+          if(hartNewCharInRxFifo)     // Functional equivalent to rxIsr()
+          {
+            hartNewCharInRxFifo = FALSE;
+            // Build the message using Original Function
+            hartReceiverSm();
+          }
+      }
 #endif
 

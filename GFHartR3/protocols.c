@@ -123,13 +123,22 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 // Index 13 = the number of times the address wasn't valid
 // Index 14 = SPARE
 
-///
-/// hartReceiverSm()
-///
-/// Implements the Hart receiver state machine.
-/// (start with the minimal: message building)
-///
-void hartReceiverSm (void)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
+/*!
+ * 	hartReceiver()
+ * 	Implement the Hart Receiver state machine
+ * 	\param ope	Valid operations = opeInit, opeBuild
+ * 	\returns 	the result of the hart building
+ * 	- hrsIdle					the internal SM is waiting for preamble
+ * 	- hrsValidFrame		Valid frame with the address of this module has been received
+ * 	- hrsDone					a valid frame and at least one extra byte has been received (current idl
+ * 	- hrsError				an internal error has been detected
+ * 	- hrsBusy
+ *
+ * 	 Implementation notes:
+ * 	 ValidFrame will transition to
+ * 	 Done and Error will end
+ */
+void hartReceiver(void)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
 {
     unsigned char nextByte;
     unsigned char statusReg;

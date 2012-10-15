@@ -1,13 +1,17 @@
 //	GF Hart Communication Module - code Rev 3. renew 
 //	10/11/12
 Integrates Hart Receiver state machine - protocols.c
-- copy files from C:\Users\Marco.Ginn\git\Hart\HartFw3 project
+- copy files from 
+	- C:\Users\Marco.Ginn\git\Hart\HartFw3 project (win)
+	- marco/git/Hart/HartFw3	(linux)
+	
+- Rx Fifo stores received byte with status
+- Using events to enter main loop
+- define a version of hartReceiverSm()
 
-- Hart Rx Fifo needs to store status byte
+If a string "go" is received, when the gap timer expires sends 'g' every second. When "end" is received, it sends
+'r' every two seconds
 
-
-Waits for a number N - outputs OK
-If a string "GO" is received it start sending N chars every 125mS
   
 
 - Basic Clock System prepared for LPM0

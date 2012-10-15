@@ -11,6 +11,9 @@
 #include "define.h"
 #include "msp_port.h"
 #include "hardware.h"
+#include "driverUart.h"
+#include "hartMain.h"
+
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
@@ -156,33 +159,35 @@ void initClock(void)
   //    Done with system clock settings
 }
 
+/*!
+ * 	\function  initTimers()
+ * 	Configure the msp430 timers as follows:
+ * 	- System timer: TB, TBCLK = ACLK/8 = 4096Hz, 8 ticks/sec,
+ * 	- Hart Receiver gap and reply dog timers:	ACLK/8 = 4096Hz,
+ */
 //
-// \function  initTimers()
-//  Configure msp430 timers
-//  System timer: TB, TBCLK = ACLK/8 = 4096Hz, 1 tick/10 sec,
+//
+//
 //
 initTimers()
 {
 
+	// Timer B0 = System Timer
   TBCCTL0 = CCIE;     // TRCCR0 interrupt enabled
-  TBCCR0 =  508;      // (125-1)mS*4.096Khz;    // System Tick every 125mS
-            //8;      // aprox 2mS
-            // 8188;  // (2000-1)mS*4.096Khz;   // Tick every 2 secs
-            //40956u; // (10000-1)mS*4.096Khz;   // Tick every 10 secs
+  TBCCR0 =  SYSTEM_TICK_TPRESET;
+
   TBCTL = TBSSEL_1 |  // TBCLK -> ACLK source
-          MC_1 |      // Upmode
+          MC_1 |      // Up Mode
           ID_3 |      // TBCLK = ACLK/8 = 4096 Hz
           TBCLR;      // Clear
 
+  // Timer A1 = Hart Receiver timing, interrupts enabled on their respective ctrl functions
+  HART_RCV_TIMER_CTL =	TASSEL_1	|	// Clock Source = ACLK
+  											MC_2 |			// Continuous
+  											ID_3 |			// /8
+  											TACLR;			//	Clear
 
-#if 0
-  // configure the HART times
-  //dllTimer.count = 0;               //    initHartTimer(&dllTimer); //initHartTimers();
-  dllTimer.onFlag = FALSE;
-  // Configure the 9900 main message timer
-  mainMsgTimer.count = 0;           // initHartTimer(&mainMsgTimer); //init9900Timers();
-  mainMsgTimer.onFlag = FALSE;
-#endif
+
 
 }
 /*
@@ -317,8 +322,35 @@ __interrupt void TIMERB1_ISR(void)
 {
   _no_operation();
   ++SistemTick125mS;
+  SET_SYSTEM_EVENT(evTimerTick);
   //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
+}
 
-
+/*!
+ * Timer A1	interrupt service routine for CC0
+ * 0= Inter character GAP expired
+ *
+ */
+#pragma vector=TIMER1_A0_VECTOR
+__interrupt void gapTimerISR(void)
+{
+	SET_SYSTEM_EVENT(evHartRcvGapTimeout);
+	HART_RCV_GAP_TIMER_CCR += 	GAP_TIMER_PRESET;
+	//while(1);	// Trap
+}
+/*!
+ * Timer A1	interrupt service routine for CC1-CC2 and TAIFG
+ * 1=Slave response time
+ *
+ */
+#pragma vector=TIMER1_A1_VECTOR
+__interrupt void slaveReplyTimerISR(void)
+{
+	if( TA1IV == TA1IV_TA1CCR1)
+	{
+		SET_SYSTEM_EVENT(evHartRcvReplyTimer);
+		HART_RCV_REPLY_TIMER_CCR +=	REPLY_TIMER_PRESET;
+	}
+	//while(1);	// Trap
 }
 
