@@ -8,6 +8,8 @@ CG_TOOL_ROOT := C:/ti/ccsv5/tools/compiler/msp430_4.1.1
 
 ORDERED_OBJS += \
 $(GEN_CMDS__FLAG) \
+"./protocols.obj" \
+"./merge.obj" \
 "./hartMain.obj" \
 "./hardware.obj" \
 "./fifo.obj" \
@@ -125,8 +127,8 @@ GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(MSP430_EXECUTABLE_OUTPUTS__QUOTED) "GFHartR3.out"
-	-$(RM) "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" 
-	-$(RM) "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" 
+	-$(RM) "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "merge.pp" "protocols.pp" 
+	-$(RM) "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "merge.obj" "protocols.obj" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

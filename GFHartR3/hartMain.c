@@ -34,6 +34,7 @@
 #include "hardware.h"
 #include "hartMain.h"
 #include "driverUart.h"
+#include "protocols.h"
 #include <string.h>
 //==============================================================================
 //  LOCAL DEFINES
@@ -66,6 +67,40 @@ void initSystem(void)
   // last setup of peripheral interrupts
   disableHartTxIntr();
   enableHartRxIntr();
+  //MH --> rename Clean out any leftovers
+  prepareToRxFrame();
+
+
+  // Merging original code = higher level inits
+  // copy in the 9900 database
+  copy9900factoryDb();
+
+  //USE_PMM_CODE-> move to Hw INIT_SVS_supervisor();
+
+
+  // Load up the volatile startup data
+  // Clear the local structure
+  memset(&startUpDataLocalV, 0, sizeof(HART_STARTUP_DATA_VOLATILE));
+  // Now copy the factory image into RAM
+  memcpy(&startUpDataLocalV, &startUpDataFactoryV, sizeof(HART_STARTUP_DATA_VOLATILE));
+  // Load up the nonvolatile startup data
+  // Load the startup data from NV memory
+  syncToRam(VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv), sizeof(HART_STARTUP_DATA_NONVOLATILE));
+  // If the local data structure has bad values, initialize them
+  if (GF_MFR_ID != startUpDataLocalNv.ManufacturerIdCode)
+  {
+    initializeLocalData();
+  }
+  else
+  {
+    // Make sure we have the correct Device ID in any case
+    verifyDeviceId();
+  }
+  // Set the COLD START bit for primary & secondary
+  setPrimaryStatusBits(FD_STATUS_COLD_START);
+  setSecondaryStatusBits(FD_STATUS_COLD_START);
+  ++startUpDataLocalV.errorCounter[8];
+
 }
 
 /*!
@@ -108,6 +143,9 @@ tEvent waitForEvent()
   return evNull;	                // Never happens, unless unregistered event. Returning NULL is safer (I think)
 }
 
+
+/////////////////////////////////
+
 #define BUFSIZE 50
 void main()
 {
@@ -128,6 +166,9 @@ void main()
   CLEARB(TP_PORTOUT, TP1_MASK);     // Indicate we are running
   // hartReceiverSm(INIT);
   tEvent systemEvent;
+
+  // Prepare one frame (this should be part of the state machine)
+  prepareToRxFrame();
   while(1)													// continuous loop
   {
   	systemEvent = waitForEvent();
@@ -135,30 +176,12 @@ void main()
   	{
   	case evHartRxChar:
   		kickHartRecTimers();					//	GapTimer and Response Timer
-  		ch = getwUart(&hartUart);
-  		RxBuf[2] =	RxBuf[1];
-  		RxBuf[1] = RxBuf[0];
-  		RxBuf[0] = ch;
-  		_no_operation();
-  		// Start "Rec"
-  		if(!strncmp((const char *)RxBuf,"og",2 ))		// go
-  			startGapTimerEvent();
-  		else
-  		if(!strncmp((const char *)RxBuf,"per",3 ))	// rep
-  		{
-  			stopGapTimerEvent();
-  			startReplyTimerEvent();
-  		}
-  		else
-  		if(!strncmp((const char *)RxBuf,"ots",3 ))	// stop
-  		{
-  			stopGapTimerEvent();
-  			stopReplyTimerEvent();
-  		}
-
-
+  		// Just test we are receiving a 475 Frame
+  		hartReceiver(getwUart(&hartUart));
+  		// ch = getwUart(&hartUart);
 
   		break;
+
   	case evHartRcvGapTimeout:
   	  SETB(TP_PORTOUT, TP1_MASK);   // TP1 indicates time to stabilize XT1 & DCO
   	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();

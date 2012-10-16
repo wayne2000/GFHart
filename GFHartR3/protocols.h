@@ -10,9 +10,11 @@
 /*************************************************************************
   *   $INCLUDES
 *************************************************************************/
+#include "hart.h"
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
+
 // Defines
 #define HART_PREAMBLE       0xFF
 #define MIN_PREAMBLE_BYTES  2
@@ -76,16 +78,25 @@ typedef struct stHartTimer
 } HART_TIMER;
 
 
+
+
+
+
+
+
+
+
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
 // HART Frame Handlers
-void hartReceiverSm (void);
+void hartReceiver(WORD data);
 void hartTransmitterSm(void);
 //
 void incrementDllTimer(void);
 void prepareToRxFrame(void);
 void initRespBuffer(void);
+void rtsRcv(void);
 
 /*************************************************************************
   *   $GLOBAL VARIABLES
@@ -148,51 +159,7 @@ extern unsigned int HartErrRegister;
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: startDllTimer()
-//
-// Description:
-//
-// Starts the response timer running
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//      clear the count before setting the flag to prevent a race condition
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void startDllTimer(void)
-{
-    dllTimer.count = 0;
-    dllTimer.onFlag = TRUE;
-}
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: stopDllTimer()
-//
-// Description:
-//
-// Stops the DLL timer
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void stopDllTimer(void)
-{
-    dllTimer.onFlag = FALSE;
-    dllTimer.count = 0;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -238,49 +205,7 @@ inline void calculateLrc(unsigned char byte)
     szLrc ^= byte;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: enableTxIntr()
-//
-// Description:
-//
-// Enables the UART transmit interrupt
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void enableTxIntr(void)
-{
-  HART_IE |= UCTXIE;                // Enable USCI_A0 RX interrupt
-}
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: rtsRcv()
-//
-// Description:
-//
-// Set the RTS line high (receive mode)
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void rtsRcv(void)
-{
-    P4OUT |= BIT0;
-}
 
 
 

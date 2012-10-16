@@ -1,14 +1,19 @@
 //	GF Hart Communication Module - code Rev 3. renew 
-//	10/11/12
+//	10/16/12 = Validate a RX 475 communicator frame
+This version has compile errors - 1st make a successful compile
+ 
 Integrates Hart Receiver state machine - protocols.c
 - copy files from 
 	- C:\Users\Marco.Ginn\git\Hart\HartFw3 project (win)
 	- marco/git/Hart/HartFw3	(linux)
-	
+
 - Rx Fifo stores received byte with status
 - Using events to enter main loop
 - define a version of hartReceiverSm()
 - Increase stack 200->240 emulator losses some calls to onlines
+- Cleanup protocols.x and call hartReceiverSm() from main. Establish interface
+
+
 
 If a string "go" is received, when the gap timer expires sends 'g' every second. When "end" is received, it sends
 'r' every two seconds

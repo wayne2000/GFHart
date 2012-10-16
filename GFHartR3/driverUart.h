@@ -49,11 +49,11 @@ typedef struct
   int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
 
   const stFuncCtrl
-              hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers
+              hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers           //TODO: interrupt Enable/Disable is not used
               hTxDriver,                //!<  Tx driver (RTS) (off when bit ==1)
               hLoopBack;                //!<  Feed Tx back to Rx
 
-  void (*txChar)(BYTE);                 //!< Bypass Fifo to speed up transmitt
+  void (*txChar)(BYTE);                 //!<  Writes direct to TXBUF to start chained TX isrs
 
   // Dynamic members
   stFifo rxFifo, txFifo;                // Input and Output streams

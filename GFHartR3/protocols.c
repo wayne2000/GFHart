@@ -16,6 +16,7 @@
 #include "hart.h"
 #include "Main9900.h"
 
+#include "merge.h"
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
@@ -138,34 +139,71 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
  * 	 ValidFrame will transition to
  * 	 Done and Error will end
  */
-void hartReceiver(void)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
+void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
 {
     unsigned char nextByte;
     unsigned char statusReg;
-
+//1 good
     ++ErrReport[0];
     // If we are receiving characters, the host is active
     hostActive = TRUE;
-    // restart the timer
-    startDllTimer();
+    // restart the timer => MH do this different startDllTimer();
     // Check for errors before calling the state machine, since any comm error
     // resets the state machine
-    statusReg = 0;  // MH for now let's assume no erors - Need to move down this debugging HART_STAT;
+    statusReg = data >>8;       // debugging HART_STAT;
+// 2 good
     if (statusReg & UCBRK)      //!MH:   Break Detected (all data, parity and stop bits are low)
     {
         // Just clear the status register, since this break is expected
-        HART_STAT &= ~(UCBRK | UCFE | UCOE | UCPE | UCRXERR);
+      HART_STAT &= ~(UCBRK | UCFE | UCOE | UCPE | UCRXERR);
         ++ErrReport[1];
         // return;
     }
     // Now capture the character
-    nextByte = getByteHart();   //!MH:--> HART_RXBUF;
+    nextByte = data;//getByteHart();   //!MH:--> HART_RXBUF;
+// 3 good
+
+
     if (statusReg & UCFE)       //!MH:  Frame error (low stop bit)
     {
         HartErrRegister |= RCV_FRAMING_ERROR;
         ++ErrReport[2];
-        ++startUpDataLocalV.errorCounter[0];
+       //need to analize this function====>
+      //                        ++startUpDataLocalV.errorCounter[0];
+    }// copy in the 9900 database
+    copy9900factoryDb();
+
+    //USE_PMM_CODE-> move to Hw INIT_SVS_supervisor();
+
+    // Clean out any leftovers
+    prepareToRxFrame();
+
+    // Load up the volatile startup data
+    // Clear the local structure
+    memset(&startUpDataLocalV, 0, sizeof(HART_STARTUP_DATA_VOLATILE));
+    // Now copy the factory image into RAM
+    memcpy(&startUpDataLocalV, &startUpDataFactoryV, sizeof(HART_STARTUP_DATA_VOLATILE));
+    // Load up the nonvolatile startup data
+    // Load the startup data from NV memory
+    syncToRam(VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv), sizeof(HART_STARTUP_DATA_NONVOLATILE));
+    // If the local data structure has bad values, initialize them
+    if (GF_MFR_ID != startUpDataLocalNv.ManufacturerIdCode)
+    {
+        initializeLocalData();
     }
+    else
+    {
+        // Make sure we have the correct Device ID in any case
+        verifyDeviceId();
+    }
+
+    // Set the COLD START bit for primary & secondary
+    setPrimaryStatusBits(FD_STATUS_COLD_START);
+    setSecondaryStatusBits(FD_STATUS_COLD_START);
+    ++startUpDataLocalV.errorCounter[8];
+
+#if 0
+// no good
     if (statusReg & UCOE)       //!MH:  Buffer overrun (previous rx overwritten)
     {
         // if we're still receiving preamble bytes, just clear the OE flag
@@ -195,6 +233,7 @@ void hartReceiver(void)   //===> BOOLEAN HartReceiverSm() Called every time a Ha
 
     lastCharRcvd = nextByte;
 
+// 2) No good
     // increment the total byte count
     totalRcvByteCount++;
     // The receive state machine
@@ -400,6 +439,8 @@ void hartReceiver(void)   //===> BOOLEAN HartReceiverSm() Called every time a Ha
     // calc the LRC
     calculateLrc(nextByte);
     ++ErrReport[12];
+#endif
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -433,7 +474,7 @@ void hartTransmitterSm(void)
             ePresentXmitState = eXmitAck;
         }
         // Enable the transmit interrupt
-        enableTxIntr();
+        //MH enableTxIntr();
         return;
     case eXmitAck:
         respXmitIndex = (szHartResp[0] & LONG_ADDR_MASK) ? (szHartResp[LONG_COUNT_OFFSET] +
@@ -450,7 +491,7 @@ void hartTransmitterSm(void)
       putByteHart(szLrc);
       ePresentXmitState = eXmitDone;
         // Enable the transmit interrupt
-        enableTxIntr();
+        //MH enableTxIntr();
         return;
     case eXmitDone:
     case eXmitIdle:
@@ -493,7 +534,7 @@ void hartTransmitterSm(void)
     // Move to the next character
     pRespBuffer++;
     // re-enable the transmit interrupt
-    enableTxIntr();
+    //MH enableTxIntr();
     }
 
 }
@@ -617,4 +658,25 @@ void initRespBuffer(void)
   hartCommand = szHartResp[i] = szHartCmd[i];
   // set frame offset for building the command to the next position
   respBufferSize = i + 1;
+}
+///////////////////////////////////////////////////////////////////////////////////////////
+//
+// Function Name: rtsRcv()
+//
+// Description:
+//
+// Set the RTS line high (receive mode)
+//
+// Parameters: void
+//
+// Return Type: void.
+//
+// Implementation notes:
+//
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////
+/* inline */ void rtsRcv(void)
+{
+    P4OUT |= BIT0;
 }
