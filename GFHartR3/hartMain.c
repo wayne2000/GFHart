@@ -82,7 +82,7 @@ void initSystem(void)
 ///
 tEvent waitForEvent()
 {
-
+  // Wait until something happens
   while(
   		isRxEmpty(&hartUart) &&
   		SistemTick125mS < 16 &&
@@ -93,19 +93,19 @@ tEvent waitForEvent()
   	//stop_oscillator();
   	_no_operation();
   }
-  //	There is an event Here
-  tEvent event = 0;
+  //	There is an event, need to find from registered ones
+  tEvent event = evNull;
   while(event < evLastEvent)
-  if( IS_SYSTEM_EVENT(event))			// This is a macro
+  if( IS_SYSTEM_EVENT(event))			// This is a macro, providing NZ if TRUE
   {
   	_disable_interrupt();
   		CLEAR_SYSTEM_EVENT(event);
   	_enable_interrupt();
-  	return event;
+  	return event;                 // return the First event found
   }
   else
   	event++;
-  return 0;	// Never happens
+  return evNull;	                // Never happens, unless unregistered event. Returning NULL is safer (I think)
 }
 
 #define BUFSIZE 50
@@ -119,7 +119,6 @@ void main()
   // This a Debug test only
   hartUart.bRtsControl = TRUE;
   hartUart.hTxInter.enable();
-
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
   volatile BYTE ch= 'A', RxBuf[BUFSIZE], rP=0,LoadSize=1, echo=0;
   for (i=0; i<BUFSIZE ; ++i)
@@ -161,10 +160,14 @@ void main()
 
   		break;
   	case evHartRcvGapTimeout:
-  		putcUart('g',&hartUart);
-  		break;
+  	  SETB(TP_PORTOUT, TP1_MASK);   // TP1 indicates time to stabilize XT1 & DCO
+  	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();
+  	  CLEARB(TP_PORTOUT, TP1_MASK);
+  	  break;
   	case evHartRcvReplyTimer:
-  		putcUart('r',&hartUart);
+  	  SETB(TP_PORTOUT, TP2_MASK);   // TP2 indicates time to stabilize XT1 & DCO
+  	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();
+  	  CLEARB(TP_PORTOUT, TP2_MASK);
   		break;
   	case evTimerTick:
   		SistemTick125mS =0;						// every 2 secs we get here
@@ -172,6 +175,7 @@ void main()
 
 
   	}
+
 
 
 #if 0

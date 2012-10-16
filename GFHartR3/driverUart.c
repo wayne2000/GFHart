@@ -220,7 +220,7 @@ __interrupt void hartSerialIsr(void)
   default:                                  //  or spurious
     break;
   case 2:                                   // Vector 2 - RXIFG
-  	SETB(TP_PORTOUT, TP1_MASK);
+  	//SETB(TP_PORTOUT, TP1_MASK);
     rxword = (status = UCA1STAT) << 8 | UCA1RXBUF;    // read & clears the RX interrupt flag and UCRXERR status flag
     //SETB(TP_PORTOUT, TP1_MASK);
     if( hartUart.bTxMode )                  // Loopback interrupt
@@ -246,7 +246,7 @@ __interrupt void hartSerialIsr(void)
     else
       hartUart.bRxFifoOverrun = TRUE;       // Receiver Fifo overrun!!
 
-    CLEARB(TP_PORTOUT, TP1_MASK);         // signal RxDone
+    //CLEARB(TP_PORTOUT, TP1_MASK);         // signal RxDone
     break;
 
   case 4:                                   // Vector 4 - TXIFG
@@ -322,28 +322,6 @@ BOOLEAN putcUart(BYTE ch, stUart *pUart)
   __enable_interrupt();                   // Start the Tx or continue with the previous
   //  A TX ISR will be generated here
   return sent;
-}
-/*!
- * \function  writeUart(BYTE *pMem, BYTE nBytes, stUart *pUart)
- * Write nBytes bytes from the memory pointed by pMem to the output stream of pUart
- *
- * This function is intended to write a block of data to the output stream. The
- * Tx driver is controlled as indicated by members in Uart structure
- *
- * \param pMem  is the memory location to be sent to the output stream
- * \param nBytes is the amount of bytes to write
- * \param *pUart is a Uart structure whose fifo is written to. Tx control is indicated here
- *
- * \return  amount of bytes actually written
- */
-WORD writeUart(BYTE *pMem, WORD nBytes, stUart *pUart)
-{
-  WORD i, nBytesSent;
-#if 0
-  if()
-  for(i=0; i< nBytes; ++i )
-    if(putcUart(*pMem[i], pUart)) ++nBytesSent;
-#endif
 }
 
 //===================================================================================================

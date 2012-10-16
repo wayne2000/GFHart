@@ -21,8 +21,8 @@
 //	Hart slave timers
 //	Inter-character GAP time for 2 chars @1200bps =  11* 2 * 4096 /1200 =  75
 //	Slave reply time for 1.5 chars @1200bps =  11* 1.5 * 4096 /1200 =  57
-#define GAP_TIMER_PRESET	4096 		/* 75 */
-#define REPLY_TIMER_PRESET	8192 	/* 57 */
+#define GAP_TIMER_PRESET	  201 		/* 18mS ~ 75 */
+#define REPLY_TIMER_PRESET	406 	  /* 14mS ~ 53 */
 
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
