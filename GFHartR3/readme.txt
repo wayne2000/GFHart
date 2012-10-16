@@ -8,6 +8,7 @@ Integrates Hart Receiver state machine - protocols.c
 - Rx Fifo stores received byte with status
 - Using events to enter main loop
 - define a version of hartReceiverSm()
+- Increase stack 200->240 emulator losses some calls to onlines
 
 If a string "go" is received, when the gap timer expires sends 'g' every second. When "end" is received, it sends
 'r' every two seconds

@@ -135,21 +135,29 @@ void main()
   	switch(systemEvent)
   	{
   	case evHartRxChar:
-  		kickDllTimers();							//	GapTimer and Response Timer
+  		kickHartRecTimers();					//	GapTimer and Response Timer
   		ch = getwUart(&hartUart);
   		RxBuf[2] =	RxBuf[1];
   		RxBuf[1] = RxBuf[0];
   		RxBuf[0] = ch;
   		_no_operation();
   		// Start "Rec"
-  		if(!strncmp((const char *)RxBuf,"og",2 ))
+  		if(!strncmp((const char *)RxBuf,"og",2 ))		// go
   			startGapTimerEvent();
   		else
-  			if(!strncmp((const char *)RxBuf,"dne",3 ))
-  			{
-  				stopGapTimerEvent();
-  				startReplyTimerEvent();
-  			}
+  		if(!strncmp((const char *)RxBuf,"per",3 ))	// rep
+  		{
+  			stopGapTimerEvent();
+  			startReplyTimerEvent();
+  		}
+  		else
+  		if(!strncmp((const char *)RxBuf,"ots",3 ))	// stop
+  		{
+  			stopGapTimerEvent();
+  			stopReplyTimerEvent();
+  		}
+
+
 
   		break;
   	case evHartRcvGapTimeout:

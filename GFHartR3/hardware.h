@@ -118,55 +118,53 @@ inline void resetWatchdog (void)
 }
 
 /*!
- *	kickDllTimers()
- *	Set new compare values for DLL timers
+ *	kickHartRecTimers()
+ *	Reset timer count register to zero
  *
  */
-inline void kickDllTimers(void)					//!< Kick the Hart DLL dog
+inline void kickHartRecTimers(void)					//!< Kick the Hart DLL dog
 {
-	HART_RCV_GAP_TIMER_CCR		= 	HART_RCV_TIMERS_TR + GAP_TIMER_PRESET;
-	HART_RCV_REPLY_TIMER_CCR  =		HART_RCV_TIMERS_TR + REPLY_TIMER_PRESET;
+	HART_RCV_GAP_TIMER_CTL 		|= TACLR;
+	HART_RCV_REPLY_TIMER_CTL  |= TACLR;
 }
 
 /*!
  *	stopGapTimerEvent()
- *	Disable the assigned Dll timer to generate an event on Gap between characters
+ *	Set timer to mode 0 (stop counting) and clear count register
  *
  */
 inline void stopGapTimerEvent(void)
 {
-	HART_RCV_GAP_TIMER_CCTL	&= ~CCIE;			// Disable the Rx Char Gap Timer interrupt
+	HART_RCV_GAP_TIMER_CTL	&= ~MC_3;			// This makes MC_0 = stop counting
+	HART_RCV_GAP_TIMER_CTL  |= TACLR;			// Clear TAR
 }
 /*!
  *	startGapTimerEvent()
- *	Allow the assigned Dll timer to generate an interrupt at indicated preset
+ *	Start Counting Up and generate an interrupt if reaches preset
  *
  */
 inline void startGapTimerEvent(void)					//!< Kick the Hart DLL dog
 {
-	// Timer will generate an interrupt at indicated preset
-	HART_RCV_GAP_TIMER_CCR	= HART_RCV_TIMERS_TR + GAP_TIMER_PRESET;	// compare = actual + preset
-	HART_RCV_GAP_TIMER_CCTL |= CCIE;
+	HART_RCV_GAP_TIMER_CTL |= MC_1;						// Up mode
 }
 /*!
  *	stopReplyTimerEvent()
- *	Disable the assigned Dll timer to generate an event on the slave reply time
+ *	Set timer to mode 0 (stop counting) and clear count register
  *
  */
 inline void stopReplyTimerEvent(void)
 {
-	HART_RCV_GAP_TIMER_CCTL	&= ~CCIE;			// Disable the Rx Char Gap Timer interrupt
+	HART_RCV_REPLY_TIMER_CTL	&= ~MC_3;			// This makes MC_0 = stop counting
+	HART_RCV_REPLY_TIMER_CTL  |= TACLR;			// Clear TAR
 }
 /*!
  *	startReplyTimerEvent()
- *	Allow the assigned Dll timer to generate an interrupt at indicated preset
+ *	Start Counting Up and generate an interrupt if reaches preset
  *
  */
 inline void startReplyTimerEvent(void)					//!< Kick the Hart DLL dog
 {
-	// Timer will generate an interrupt at indicated preset
-	HART_RCV_REPLY_TIMER_CCR	= HART_RCV_TIMERS_TR + REPLY_TIMER_PRESET;	// compare = actual + preset
-	HART_RCV_REPLY_TIMER_CCTL |= CCIE;
+	HART_RCV_REPLY_TIMER_CTL |= MC_1 ;						// Up mode
 }
 
 

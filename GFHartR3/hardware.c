@@ -163,12 +163,9 @@ void initClock(void)
  * 	\function  initTimers()
  * 	Configure the msp430 timers as follows:
  * 	- System timer: TB, TBCLK = ACLK/8 = 4096Hz, 8 ticks/sec,
- * 	- Hart Receiver gap and reply dog timers:	ACLK/8 = 4096Hz,
+ * 	- Hart receiver gap between characters TA1, up, ACLK/8 = 4096Hz
+ * 	-	Hart slave message reply TA2, up, ACLK/8 = 4096Hz,
  */
-//
-//
-//
-//
 initTimers()
 {
 
@@ -181,11 +178,20 @@ initTimers()
           ID_3 |      // TBCLK = ACLK/8 = 4096 Hz
           TBCLR;      // Clear
 
-  // Timer A1 = Hart Receiver timing, interrupts enabled on their respective ctrl functions
-  HART_RCV_TIMER_CTL =	TASSEL_1	|	// Clock Source = ACLK
-  											MC_2 |			// Continuous
-  											ID_3 |			// /8
-  											TACLR;			//	Clear
+  // Timer A1 = Hart Rec. GAP timing
+  HART_RCV_GAP_TIMER_CTL =		TASSEL_1 |				// Clock Source = ACLK
+    													ID_3 |						// /8
+    													TACLR;						// Clear
+  HART_RCV_GAP_TIMER_CCR	= 	GAP_TIMER_PRESET;	// CCR0 preset
+  HART_RCV_GAP_TIMER_CCTL =		CCIE;							// Enable CCR0 interrupt
+
+  // Timer A2 = Hart Rec. Slave reply time
+  HART_RCV_REPLY_TIMER_CTL =	TASSEL_1	|				// Clock Source = ACLK
+  														ID_3 |						// /8
+  														TACLR;						//	Clear
+  HART_RCV_REPLY_TIMER_CCR = 	REPLY_TIMER_PRESET;// CCR0
+  HART_RCV_REPLY_TIMER_CCTL =	CCIE;							// Enable CCR0 interrupt
+
 
 
 
@@ -335,7 +341,6 @@ __interrupt void TIMERB1_ISR(void)
 __interrupt void gapTimerISR(void)
 {
 	SET_SYSTEM_EVENT(evHartRcvGapTimeout);
-	HART_RCV_GAP_TIMER_CCR += 	GAP_TIMER_PRESET;
 	//while(1);	// Trap
 }
 /*!
@@ -343,14 +348,10 @@ __interrupt void gapTimerISR(void)
  * 1=Slave response time
  *
  */
-#pragma vector=TIMER1_A1_VECTOR
+#pragma vector=TIMER2_A0_VECTOR
 __interrupt void slaveReplyTimerISR(void)
 {
-	if( TA1IV == TA1IV_TA1CCR1)
-	{
-		SET_SYSTEM_EVENT(evHartRcvReplyTimer);
-		HART_RCV_REPLY_TIMER_CCR +=	REPLY_TIMER_PRESET;
-	}
+	SET_SYSTEM_EVENT(evHartRcvReplyTimer);
 	//while(1);	// Trap
 }
 
