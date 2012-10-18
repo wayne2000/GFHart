@@ -3,6 +3,11 @@
 1) Merging files from the original (trimmed) project
 2) added files will have a "r3" suffix in its name: hartr3, utilitiesr3, main9900r3
 3) create a contention fileset merge.x to incremental add files
+4) Project Run-Time model options setting changed:
+	--silicon_version	msp 	uses msp430 cpu
+	--abi			eabi	uses eabi for aplication binary interface
+	--code_model		small	16b function pointers and 64K low memory
+	--data_model		small	16b data pointers and 64K low memory
 
 GOAL is to =>>  Validate a RX 475 communicator frame, RX a command and TX a response
 - copy files from \git\HartGitHub\HartFw3 project (win - cloned from GitHub)
