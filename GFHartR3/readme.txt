@@ -1,10 +1,11 @@
 //	GF Hart Communication Module - code Rev 3. renew 
-//	10/16/12 = Validate a RX 475 communicator frame
-This version has compile errors - 1st make a successful compile
- 
-Integrates Hart Receiver state machine - protocols.c
-- copy files from 
-	- C:\Users\Marco.Ginn\git\Hart\HartFw3 project (win)
+//	10/18/12 - The original receiver works with Rx/Driver!!
+1) Merging files from the original (trimmed) project
+2) added files will have a "r3" suffix in its name: hartr3, utilitiesr3, main9900r3
+3) create a contention fileset merge.x to incremental add files
+
+GOAL is to =>>  Validate a RX 475 communicator frame, RX a command and TX a response
+- copy files from \git\HartGitHub\HartFw3 project (win - cloned from GitHub)
 	- marco/git/Hart/HartFw3	(linux)
 
 - Rx Fifo stores received byte with status
@@ -12,13 +13,6 @@ Integrates Hart Receiver state machine - protocols.c
 - define a version of hartReceiverSm()
 - Increase stack 200->240 emulator losses some calls to onlines
 - Cleanup protocols.x and call hartReceiverSm() from main. Establish interface
-
-
-
-If a string "go" is received, when the gap timer expires sends 'g' every second. When "end" is received, it sends
-'r' every two seconds
-
-  
 
 - Basic Clock System prepared for LPM0
 	ACLK  = XT1CLK  =   32.768Khz external crystal

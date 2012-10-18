@@ -13,10 +13,12 @@
 #include "msp_port.h"
 #include "protocols.h"
 #include "driverUart.h"
-#include "hart.h"
-#include "Main9900.h"
+#include "hartr3.h"
+#include "main9900r3.h"
 
 #include "merge.h"
+#include "utilitiesr3.h"
+
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
@@ -128,11 +130,13 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
  * 	hartReceiver()
  * 	Implement the Hart Receiver state machine
  * 	\param ope	Valid operations = opeInit, opeBuild
+ *
  * 	\returns 	the result of the hart building
  * 	- hrsIdle					the internal SM is waiting for preamble
  * 	- hrsValidFrame		Valid frame with the address of this module has been received
  * 	- hrsDone					a valid frame and at least one extra byte has been received (current idl
- * 	- hrsError				an internal error has been detected
+ * 	- hrsErrorDump		an internal error has been detected - rest of message dumped
+ * 	- hrsErrorReport  message wt this point contain errors, mus reply with a status
  * 	- hrsBusy
  *
  * 	 Implementation notes:
@@ -143,7 +147,6 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
 {
     unsigned char nextByte;
     unsigned char statusReg;
-//1 good
     ++ErrReport[0];
     // If we are receiving characters, the host is active
     hostActive = TRUE;
@@ -151,7 +154,6 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     // Check for errors before calling the state machine, since any comm error
     // resets the state machine
     statusReg = data >>8;       // debugging HART_STAT;
-// 2 good
     if (statusReg & UCBRK)      //!MH:   Break Detected (all data, parity and stop bits are low)
     {
         // Just clear the status register, since this break is expected
@@ -161,49 +163,13 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     }
     // Now capture the character
     nextByte = data;//getByteHart();   //!MH:--> HART_RXBUF;
-// 3 good
-
-
     if (statusReg & UCFE)       //!MH:  Frame error (low stop bit)
     {
         HartErrRegister |= RCV_FRAMING_ERROR;
         ++ErrReport[2];
        //need to analize this function====>
       //                        ++startUpDataLocalV.errorCounter[0];
-    }// copy in the 9900 database
-    copy9900factoryDb();
-
-    //USE_PMM_CODE-> move to Hw INIT_SVS_supervisor();
-
-    // Clean out any leftovers
-    prepareToRxFrame();
-
-    // Load up the volatile startup data
-    // Clear the local structure
-    memset(&startUpDataLocalV, 0, sizeof(HART_STARTUP_DATA_VOLATILE));
-    // Now copy the factory image into RAM
-    memcpy(&startUpDataLocalV, &startUpDataFactoryV, sizeof(HART_STARTUP_DATA_VOLATILE));
-    // Load up the nonvolatile startup data
-    // Load the startup data from NV memory
-    syncToRam(VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv), sizeof(HART_STARTUP_DATA_NONVOLATILE));
-    // If the local data structure has bad values, initialize them
-    if (GF_MFR_ID != startUpDataLocalNv.ManufacturerIdCode)
-    {
-        initializeLocalData();
     }
-    else
-    {
-        // Make sure we have the correct Device ID in any case
-        verifyDeviceId();
-    }
-
-    // Set the COLD START bit for primary & secondary
-    setPrimaryStatusBits(FD_STATUS_COLD_START);
-    setSecondaryStatusBits(FD_STATUS_COLD_START);
-    ++startUpDataLocalV.errorCounter[8];
-
-#if 0
-// no good
     if (statusReg & UCOE)       //!MH:  Buffer overrun (previous rx overwritten)
     {
         // if we're still receiving preamble bytes, just clear the OE flag
@@ -217,7 +183,7 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
         }
         else
         {
-            HART_STAT &= ~UCOE;
+            HART_STAT &= ~UCOE;   //TODO: This is shuld be removed, as my Status is a copy and out of context
             ++startUpDataLocalV.errorCounter[14];
         }
     }
@@ -439,7 +405,6 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     // calc the LRC
     calculateLrc(nextByte);
     ++ErrReport[12];
-#endif
 
 }
 

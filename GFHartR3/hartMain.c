@@ -35,6 +35,7 @@
 #include "hartMain.h"
 #include "driverUart.h"
 #include "protocols.h"
+#include "merge.h"
 #include <string.h>
 //==============================================================================
 //  LOCAL DEFINES
@@ -47,7 +48,7 @@ void initSystem(void);
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
-unsigned int sEvents[1 + (evLastEvent +1)/16];		// Array where events are stored
+unsigned int sEvents[1 + (evLastEvent +1)/16];	// Array where events are stored
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -55,6 +56,8 @@ volatile int16u  low_power=0;
 //==============================================================================
 // FUNCTIONS
 //==============================================================================
+
+
 /*!
  * \function  initSystem()
  * \brief     Perform the system level Hart Initialization
@@ -78,28 +81,9 @@ void initSystem(void)
   //USE_PMM_CODE-> move to Hw INIT_SVS_supervisor();
 
 
-  // Load up the volatile startup data
-  // Clear the local structure
-  memset(&startUpDataLocalV, 0, sizeof(HART_STARTUP_DATA_VOLATILE));
-  // Now copy the factory image into RAM
-  memcpy(&startUpDataLocalV, &startUpDataFactoryV, sizeof(HART_STARTUP_DATA_VOLATILE));
-  // Load up the nonvolatile startup data
-  // Load the startup data from NV memory
-  syncToRam(VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv), sizeof(HART_STARTUP_DATA_NONVOLATILE));
-  // If the local data structure has bad values, initialize them
-  if (GF_MFR_ID != startUpDataLocalNv.ManufacturerIdCode)
-  {
-    initializeLocalData();
-  }
-  else
-  {
-    // Make sure we have the correct Device ID in any case
-    verifyDeviceId();
-  }
-  // Set the COLD START bit for primary & secondary
-  setPrimaryStatusBits(FD_STATUS_COLD_START);
-  setSecondaryStatusBits(FD_STATUS_COLD_START);
-  ++startUpDataLocalV.errorCounter[8];
+  // MH:  I am trying to collect all initializations in a single function
+  //      and also to understand the interface, keeping high level here
+  initStartUpData();
 
 }
 
@@ -178,8 +162,6 @@ void main()
   		kickHartRecTimers();					//	GapTimer and Response Timer
   		// Just test we are receiving a 475 Frame
   		hartReceiver(getwUart(&hartUart));
-  		// ch = getwUart(&hartUart);
-
   		break;
 
   	case evHartRcvGapTimeout:
@@ -201,23 +183,10 @@ void main()
 
 
 
-#if 0
-      if(rP < BUFSIZE)
-        RxBuf[rP++]= getcUart(&hartUart);
-      else
-        RxBuf[rP=0]= getcUart(&hartUart);
-#endif
 
     if(echo && SistemTick125mS >= 1)
     {
       SistemTick125mS =0;
-#if 0
-      if(hartUart.hTxDriver.isEnabled())
-        hartUart.hTxDriver.disable();
-      else
-        hartUart.hTxDriver.enable();
-#endif
-
       for(i=0; i< LoadSize; ++i)
         putcUart(ch++,&hartUart);
 
@@ -232,54 +201,4 @@ void main()
 }
 
 
-#if 0
-
-if(low_power)
-{
-  __bis_SR_register(LPM3_bits + GIE);       // Enter LPM3, enable interrupts
-  __no_operation();                         // For debugger
-}
-else
-  _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
-
-etSystemEvent =waitForEvent();
-switch(etSystemEvent)
-{
-case evHartRxChar:
-  break;
-
-}
-
-for(i=5000;i>0;i--);                   // Delay
-//P1OUT ^=0x01;
-
-#endif
-
-#if 0
-  char inisr=0, inget=0, data=0, status =0;
-  WORD rword;
-  while(1)
-  {
-  	if(inisr)			// Simulate a Rxif
-  	if(!isRxFull(&hartUart))                //  put data in input stream if no errors
-  		putwFifo(&hartUart.rxFifo, status <<8 | data);  // Signal an Event to main loop
-  	if(inget)			// Get data
-  		rword = getwUart(&hartUart);  // Signal an Event to main loop
-
-  }
-#endif
-#if 0
-    if(hartUart.bNewRxChar)
-    {
-      hartUart.bNewRxChar = FALSE;
-      i= getwUart(&hartUart);
-      //  Handle events from modules
-          if(hartNewCharInRxFifo)     // Functional equivalent to rxIsr()
-          {
-            hartNewCharInRxFifo = FALSE;
-            // Build the message using Original Function
-            hartReceiverSm();
-          }
-      }
-#endif
 

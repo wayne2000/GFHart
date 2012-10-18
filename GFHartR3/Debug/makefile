@@ -8,8 +8,10 @@ CG_TOOL_ROOT := C:/ti/ccsv5/tools/compiler/msp430_4.1.1
 
 ORDERED_OBJS += \
 $(GEN_CMDS__FLAG) \
+"./utilitiesr3.obj" \
 "./protocols.obj" \
 "./merge.obj" \
+"./hartr3.obj" \
 "./hartMain.obj" \
 "./hardware.obj" \
 "./fifo.obj" \
@@ -120,15 +122,15 @@ all: GFHartR3.out
 GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: MSP430 Linker'
-	"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/bin/cl430" -vmspx --abi=eabi -Ooff -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=240 -m"GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"C:/ti/ccsv5/ccs_base/msp430/include" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/lib" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
+	"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/bin/cl430" -vmsp --abi=eabi --code_model=small --data_model=small -Ooff -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=240 -m"GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"C:/ti/ccsv5/ccs_base/msp430/include" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/lib" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 # Other Targets
 clean:
 	-$(RM) $(MSP430_EXECUTABLE_OUTPUTS__QUOTED) "GFHartR3.out"
-	-$(RM) "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "merge.pp" "protocols.pp" 
-	-$(RM) "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "merge.obj" "protocols.obj" 
+	-$(RM) "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "hartr3.pp" "merge.pp" "protocols.pp" "utilitiesr3.pp" 
+	-$(RM) "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartr3.obj" "merge.obj" "protocols.obj" "utilitiesr3.obj" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

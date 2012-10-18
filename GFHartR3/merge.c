@@ -14,8 +14,9 @@
 #include "define.h"
 #include "protocols.h"
 #include "merge.h"
-#include "main9900.h"
-
+#include "utilitiesr3.h"
+#include "main9900r3.h"
+#include "string.h"
 //========================
 //  LOCAL DEFINES
 //========================
@@ -27,9 +28,8 @@
 //========================
 // Do we have a host actively communicating?
 int hostActive = FALSE;
-// The startup data
-HART_STARTUP_DATA_NONVOLATILE startUpDataLocalNv;
-HART_STARTUP_DATA_VOLATILE startUpDataLocalV;
+
+
 int rcvBroadcastAddr = FALSE;
 // 9900 Database
 U_DATABASE_9900 u9900Database;
@@ -67,95 +67,76 @@ const DATABASE_9900 factory9900db =
 //==============================================================================
 
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
-// Function Name: isAddressValid()
+// Function Name: initializeLocalData()
 //
 // Description:
 //
-// Verify that the address is either a broadcast address or is an exact match
-// to the poll address in the database. Returns TRUE if either conditions
-// met, FALSE otherwise
+// Utility to initialize the local data structure for the first time, or if
+// the NV memory is ever corrupted.
 //
-// Parameters:
-//     unsigned char * pCommand:  pointer to the HART command to check the address of.
+// Parameters: void
 //
-// Return Type: unsigned int.
+// Return Type: void.
 //
 // Implementation notes:
-//
+//    If the NV memory is corrupt, copy the factory structure into
+//    ram, then copy the RAM to the FLASH
 //
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
-// HART 7 compliant
-int isAddressValid(void)
+void initializeLocalData (void)
 {
-  union
-  {
-    unsigned int i;
-    unsigned char b[2];
-  } myDevId;
-  int index;
-  // Mask the Primary bit out of the poll address
-  unsigned char pollAddress = szHartCmd[addressStartIdx] & ~(PRIMARY_MASTER | BURST_MODE_BIT);
-  // Now capture if it is from the primary or secondary master
-  startUpDataLocalV.fromPrimary = (szHartCmd[addressStartIdx] & PRIMARY_MASTER) ? TRUE : FALSE;
-  int isValid = FALSE;
-
-  // Set the broadcast flag to FALSE
-  rcvBroadcastAddr = FALSE;
-  // Remove the Burst mode bit
-  szHartCmd[addressStartIdx] &= ~BURST_MODE_BIT;
-  if (longAddressFlag)
-  {
-    // We only need to compare to the lower 14 bits
-    myDevId.i = startUpDataLocalV.expandedDevType & EXT_DEV_TYPE_ADDR_MASK;
-    // Now XOR out the recieved address for each
-    myDevId.b[1] ^= szHartCmd[addressStartIdx] & POLL_ADDR_MASK;
-    myDevId.b[0] ^= szHartCmd[addressStartIdx+1];
-    // If the ID is 0, check for a unique address
-    if (!myDevId.i)
-    {
-      // Now compare the last 3 bytes of address
-      if (!(memcmp(&szHartCmd[addressStartIdx+2], &startUpDataLocalNv.DeviceID, 3)))
-      {
-        isValid = TRUE;
-      }
-    }
-    // If the address is not a unique address for me,
-    // look for the broadcast address
-    if (!isValid)
-    {
-      // Check to see if it is a broadcast. We have to check the first byte
-      // separately, since it may have the primary master bit set.
-      // Mask out the primary master bit of the first byte
-      if (0 != (szHartCmd[addressStartIdx] & ~PRIMARY_MASTER))
-      {
-        return isValid;
-      }
-      // Now check the following 4 bytes
-      for (index = 1; index < LONG_ADDR_SIZE; ++index)
-      {
-        // the rest of the bytes are 0 if this is a broadcast address
-        if(0 != szHartCmd[addressStartIdx+index])
-        {
-          return isValid;
-        }
-      }
-      rcvBroadcastAddr = TRUE;
-      isValid = TRUE;
-    }
-  }
-  else  // short Polling address for Cmd0?
-  {
-    if (startUpDataLocalNv.PollingAddress == pollAddress)
-    {
-      isValid = TRUE;
-    }
-  }
-  return isValid;
+  int numSegsToErase;
+  // Clear the local structure
+  memset(&startUpDataLocalNv, 0, sizeof(HART_STARTUP_DATA_NONVOLATILE));
+  // Now copy the factory image into RAM
+  memcpy(&startUpDataLocalNv, &startUpDataFactoryNv, sizeof(HART_STARTUP_DATA_NONVOLATILE));
+  // Now copy in the NV unique device ID
+  copyNvDeviceIdToRam();
+  // erase the segment of FLASH so it can be reprogrammed
+  numSegsToErase = calcNumSegments (sizeof(HART_STARTUP_DATA_NONVOLATILE));
+  eraseMainSegment(VALID_SEGMENT_1, (numSegsToErase*MAIN_SEGMENT_SIZE));
+  // Copy the local data into NV memory
+  copyMemToMainFlash (VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv),
+    sizeof(HART_STARTUP_DATA_NONVOLATILE));
 }
+
+
+/*!
+ *  initStartUpData()
+ *  Wrapper to initialize all data structures - interfaces with main
+ *
+ */
+void initStartUpData()
+{
+  // Load up the volatile startup data
+  // Clear the local structure
+  memset(&startUpDataLocalV, 0, sizeof(HART_STARTUP_DATA_VOLATILE));
+  // Now copy the factory image into RAM
+  memcpy(&startUpDataLocalV, &startUpDataFactoryV, sizeof(HART_STARTUP_DATA_VOLATILE));
+  // Load up the nonvolatile startup data
+  // Load the startup data from NV memory
+  syncToRam(VALID_SEGMENT_1, ((unsigned char *)&startUpDataLocalNv), sizeof(HART_STARTUP_DATA_NONVOLATILE));
+  // If the local data structure has bad values, initialize them
+  if (GF_MFR_ID != startUpDataLocalNv.ManufacturerIdCode)
+  {
+    initializeLocalData();
+  }
+  else
+  {
+    // Make sure we have the correct Device ID in any case
+    verifyDeviceId();
+  }
+  // Set the COLD START bit for primary & secondary
+  setPrimaryStatusBits(FD_STATUS_COLD_START);
+  setSecondaryStatusBits(FD_STATUS_COLD_START);
+  ++startUpDataLocalV.errorCounter[8];
+}
+
+
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////

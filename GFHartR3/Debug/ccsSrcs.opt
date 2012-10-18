@@ -1,1 +1,1 @@
-"../driverUart.c" "../fifo.c" "../hardware.c" "../hartMain.c" "../merge.c" "../protocols.c" 
+"../driverUart.c" "../fifo.c" "../hardware.c" "../hartMain.c" "../hartr3.c" "../merge.c" "../protocols.c" "../utilitiesr3.c" 
