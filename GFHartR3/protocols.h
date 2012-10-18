@@ -14,6 +14,39 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
+  ///
+  /// HART receive frame state machine possible results
+  ///
+  typedef enum
+  {
+    hrsResultIdle,        //!<  the internal SM is waiting for preamble
+    hrsResultValidFrame,  //!<  Valid frame with the address of this module has been received
+    hrsResultDone,        //!<  a valid frame and at least one extra byte has been received (current idl
+    hrsResultErrorDump,   //!<  an internal error has been detected - rest of message dumped
+    hrsResultErrorReport, //!<  message wt this point contain errors, mus reply with a status
+    hrsResultBusy         //!<  A frame is being building with no errors so far
+  } hrsResult;
+  typedef enum
+    {
+      hrsOpeReset,       //!<  Initialize the Hart Frame Receiver
+      hrsOpeBuild        //!<  Build the frame
+    } hrsOperation;
+
+
+///
+///  The following enumeration is for the HART
+///  transmit state machine
+///
+typedef enum
+{
+    eXmitIdle,
+    eXmitPreamble,
+    eXmitAck,
+    eXmitCtrlData,
+    eXmitLrc,
+    eXmitXtraChar, //
+    eXmitDone
+} eXmitState;
 
 // Defines
 #define HART_PREAMBLE       0xFF
@@ -38,59 +71,12 @@
 // 9900 if it is in a fixed current state
 #define UPDATE_REMINDER_COUNT   20
 
-///
-///  The following enumeration is for the HART
-///  transmit state machine
-///
-typedef enum
-{
-    eXmitIdle,
-    eXmitPreamble,
-    eXmitAck,
-    eXmitCtrlData,
-    eXmitLrc,
-    eXmitXtraChar, //
-    eXmitDone
-} eXmitState;
-
-///
-/// The following enumeration is for the HART
-/// receive state machine
-///
-typedef enum
-{
-    eRcvSom,
-    eRcvAddr,
-    eRcvCmd,
-    eRcvByteCount,
-    eRcvData,
-    eRcvLrc,
-    eRcvXtra
-} eRcvState;
-
-///
-/// HART timer/counter struct
-///
-typedef struct stHartTimer
-{
-    int onFlag;  // TRUE if the timer is ON, FALSE otherwise
-    unsigned int count;  // Current timer count
-} HART_TIMER;
-
-
-
-
-
-
-
-
-
 
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
 // HART Frame Handlers
-void hartReceiver(WORD data);
+hrsResult hartReceiver(hrsOperation ope, WORD data);
 void hartTransmitterSm(void);
 //
 void incrementDllTimer(void);
@@ -102,8 +88,6 @@ void rtsRcv(void);
   *   $GLOBAL VARIABLES
 *************************************************************************/
 // exported HART timer variables
-extern HART_TIMER mainMsgTimer; // 9900 Message timer
-extern HART_TIMER dllTimer;
 extern unsigned char szHartCmd [];        // The HART Command buffer
 extern unsigned char szHartResp [];       // The HART response buffer
 extern unsigned int respBufferSize;         // The size of the response buffer
@@ -160,28 +144,6 @@ extern unsigned int HartErrRegister;
   *   $INLINE FUNCTIONS
 *************************************************************************/
 
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: readDllTimer()
-//
-// Description:
-//
-// Reads the value of the HART timer
-//
-// Parameters: void
-//
-// Return Type: unsigned int - the number in count.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline unsigned int readDllTimer(void)
-{
-    return dllTimer.count;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

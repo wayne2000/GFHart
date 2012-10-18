@@ -27,14 +27,17 @@
 #define MAX_RCV_BYTE_COUNT 267
 #define MAX_HART_DATA_SIZE 255
 
+
+
+
+
 //==============================================================================
 //  LOCAL PROTOTYPES.
 //==============================================================================
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
-HART_TIMER dllTimer;                    //!< Provides Gap and Response Hart timing
-HART_TIMER mainMsgTimer;
+
 ///
 /// command information
 ///
@@ -78,12 +81,11 @@ unsigned char szHartCmd [MAX_RCV_BYTE_COUNT];       //!< Rcvd message buffer (st
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
-static unsigned char rcvAddrCount = 0;             //!< The number of address bytes received
-static unsigned char rcvByteCount = 0;             //!< The total number of received bytes, starting with the SOM
-static int preambleByteCount = 0;                  //!< the number of preamble bytes received
-static eRcvState ePresentRcvState = eRcvSom;
-static unsigned char totalRcvByteCount;
+
 static unsigned char * pRespBuffer = NULL;       //!< Pointer to the response buffer
+
+
+
 
 //==============================================================================
 // FUNCTIONS
@@ -143,11 +145,46 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
  * 	 ValidFrame will transition to
  * 	 Done and Error will end
  */
-void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
+hrsResult hartReceiver(hrsOperation ope, WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
 {
-    unsigned char nextByte;
-    unsigned char statusReg;
-    ++ErrReport[0];
+  /// HART receive state machine
+  typedef enum
+  {
+    eRcvSom,
+    eRcvAddr,
+    eRcvCmd,
+    eRcvByteCount,
+    eRcvData,
+    eRcvLrc,
+    eRcvXtra
+  } eRcvState;
+  unsigned char nextByte;
+  unsigned char statusReg;
+
+  // Here come the list of Statics
+  static eRcvState ePresentRcvState = eRcvSom;
+  static unsigned char rcvAddrCount = 0;             //!< The number of address bytes received
+  static unsigned char rcvByteCount = 0;             //!< The total number of received bytes, starting with the SOM
+  static int preambleByteCount = 0;                  //!< the number of preamble bytes received
+  static unsigned char totalRcvByteCount;
+
+  //  Operation to initialize the internal State Machine (eq. to prepareToRxFrame
+  if(ope == hrsOpeReset)
+  {
+    // start with locals
+    // locals
+    rcvByteCount = 0;
+    rcvAddrCount = 0;
+    preambleByteCount = 0;
+    totalRcvByteCount = 0;
+    ePresentRcvState = eRcvSom;   // Set the state machine to look for the start of message
+    // Set the transmit pointer back to the beginning of the buffer
+    pRespBuffer = szHartResp;
+
+
+    return hrsResultIdle;
+  }
+  ++ErrReport[0];
     // If we are receiving characters, the host is active
     hostActive = TRUE;
     // restart the timer => MH do this different startDllTimer();
@@ -574,17 +611,7 @@ void prepareToRxFrame(void)
   overrunErr = FALSE;
   parityErr = FALSE;
 
-  // locals
-  rcvByteCount = 0;
-  rcvAddrCount = 0;
-  preambleByteCount = 0;
-  totalRcvByteCount = 0;
-  ePresentRcvState = eRcvSom;   // Set the state machine to look for the start of message
-  // Set the transmit pointer back to the beginning of the buffer
-   pRespBuffer = szHartResp;
-
-
-
+  hartReceiver(hrsOpeReset, 0);
 
 }
 

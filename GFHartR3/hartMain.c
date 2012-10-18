@@ -161,7 +161,7 @@ void main()
   	case evHartRxChar:
   		kickHartRecTimers();					//	GapTimer and Response Timer
   		// Just test we are receiving a 475 Frame
-  		hartReceiver(getwUart(&hartUart));
+  		hartReceiver(hrsOpeBuild, getwUart(&hartUart));
   		break;
 
   	case evHartRcvGapTimeout:
