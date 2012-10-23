@@ -35,6 +35,7 @@
 #include "hartMain.h"
 #include "driverUart.h"
 #include "protocols.h"
+#include "hartcommandr3.h"
 #include "merge.h"
 #include <string.h>
 //==============================================================================
@@ -49,6 +50,7 @@ void initSystem(void);
 //  GLOBAL DATA
 //==============================================================================
 unsigned int sEvents[1 + (evLastEvent +1)/16];	// Array where events are stored
+
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -103,6 +105,7 @@ tEvent waitForEvent()
   // Wait until something happens
   while(
   		isRxEmpty(&hartUart) &&
+  		//!isEnabledHartTxDriver() &&  // Its is better to test RTS line: isTxEmpty && RTS disable
   		SistemTick125mS < 16 &&
   		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&
   		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0
@@ -158,8 +161,15 @@ void main()
   	switch(systemEvent)
   	{
   	case evHartRxChar:
-  		// Just test we are receiving a 475 Frame
+  	  SETB(TP_PORTOUT, TP1_MASK);
+  	  // Just test we are receiving a 475 Frame
   		hartReceiver(getwUart(&hartUart));
+
+  		// TODO until I know better how Hart retries, lets keep alive the gap interrupt
+  		//  everytime we receive a character
+  		//startGapTimerEvent();
+
+      CLEARB(TP_PORTOUT, TP1_MASK);
   		break;
 
   	case evHartRcvGapTimeout:
@@ -167,16 +177,13 @@ void main()
   	    initHartRxSm();
   	  HartErrRegister |= GAP_TIMER_EXPIRED;   // Record the Fault
   	  stopGapTimerEvent();                    // Once message cancel is ack, it's ok to turn-off gap check
-  	  SETB(TP_PORTOUT, TP1_MASK);
-  	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();
-  	  CLEARB(TP_PORTOUT, TP1_MASK);
   	  break;
 
   	case evHartRcvReplyTimer:
+  	  TOGGLEB(TP_PORTOUT,TP2_MASK);
   	  // Process the frame (same as original project)
   	  if (commandReadyToProcess)
   	  {
-  	    SETB(TP_PORTOUT,TP2_MASK);
   	    // clear the flag
   	    commandReadyToProcess = FALSE;
   	    // Initialize the response buffer
@@ -187,22 +194,41 @@ void main()
   	      // If cmdReset is true && cmd reset response is false, then execute this
   	      // ship the HART response
   	      sendHartFrame();
-  	      // Start the process, and cache the Isr code
-  	      hartTransmitterSm();
+  	      //  First reset the internal sm
+  	      hartTransmitterSm(TRUE);
+  	      // Send the whole frame
+  	      while( ePresentXmitState != eXmitPreamble || ePresentXmitState != eXmitDone)
+  	        hartTransmitterSm(FALSE);
   	    }
   	    else
   	      // This command was not for this address or invalid
   	    {
   	      // Get ready to start another frame
-  	      initHartRxSm();
+  	      //initHartRxSm(); //MH: TODO: Look for side effects on Globals
+
   	    }
-  	    CLEARB(TP_PORTOUT,TP2_MASK);
   	  }
   	  stopReplyTimerEvent();        // One Reply per command
   	  break;
-  	case evTimerTick:
+
+  	case evHartTxChar:              // Keep calling Transmitter until complete
+  	  TOGGLEB(TP_PORTOUT,TP2_MASK);
+  	  //if(!isTxEmpty(&hartUart))    // need to debug the whole transmission
+  	  //hartTransmitterSm();
+  	  break;
+
+
+
+
+  	case evTimerTick:               // System timer event
   		SistemTick125mS =0;						// every 2 secs we get here
+  		// Increment the data time stamp and roll it every 24 hours
+  		++dataTimeStamp;
   		break;
+
+  	case evNull:
+  	default:   // evNull or any non enumerated
+  	  break;
 
 
   	}

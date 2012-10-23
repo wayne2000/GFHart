@@ -27,6 +27,7 @@
 #define GAP_TIMER_PRESET  75	  /* 18mS ~ 75 tested w 50mS~201 and hyperterminal 		 */
 #define REPLY_TIMER_PRESET 53   /* 14mS ~ 53, tested w 100mS~406 and hyperterminal */
 
+
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
 *************************************************************************/

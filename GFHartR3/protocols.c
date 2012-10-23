@@ -43,8 +43,10 @@
 ///
 unsigned char hartCommand = 0xff;
 unsigned char addressValid = FALSE;
-
-
+unsigned char hartFrameRcvd;                //!< Flag is set after a successfully Lrc and address is for us
+eXmitState ePresentXmitState = eXmitIdle;   //!< Set the State machines to idle state
+WORD hartDataCount;                         //!< The number of data field bytes
+BYTE expectedByteCnt;                       //!< The received byte count, to know when we're done
 int longAddressFlag = FALSE;              //!< long address flag
 unsigned char addressStartIdx = 0;        //!< address byte index
 int commandReadyToProcess = FALSE;        //!< Is the command ready to process?
@@ -55,17 +57,12 @@ unsigned long numMsgReadyToProcess = 0;
 unsigned long numMsgUnableToProcess = 0;
 
 // Parity & overrun error flags
-int parityErr = FALSE;
-int overrunErr = FALSE;
-
-unsigned char hartFrameRcvd;                //!< Flag is set after a successfully Lrc and address is for us
-eXmitState ePresentXmitState = eXmitIdle;   //!< Set the State machines to idle state
-
-
-
+int parityErr;
+int overrunErr;
+int rcvLrcError;                            //!< Did the LRC compute OK
 
 unsigned int respBufferSize;                //!< size of the response buffer
-int rcvLrcError = FALSE;                    //!< Did the LRC compute OK
+
 unsigned int HartErrRegister = NO_HART_ERRORS;  //!< The HART error register
 unsigned int respXmitIndex = 0;             //!< The index of the next response byte to transmit
 float lastRequestedCurrentValue = 0.0;      //!< The last commanded current value from command 40 is here
@@ -159,8 +156,12 @@ void initHartRxSm(void)
   longAddressFlag = FALSE;
   addressValid = FALSE;         // hartCommand.c::processHartCommand ()
 
+  // Data section of command message. First member is used everywhere
+  hartDataCount = 0;            //!< The number of data field bytes
+  expectedByteCnt = 0;          //!< The received byte count, to know when we're done
+
   // Used for Transmitter - TODO: move to hartTransmitter() once their locals are set
-  respXmitIndex = 0;
+  //respXmitIndex = 0;
 
   // Sttus of current Cmd Message - used on processHartCommand()
   rcvLrcError = TRUE;         // Assume an error until the LRC is OK
@@ -169,6 +170,7 @@ void initHartRxSm(void)
 
   // Signal the Hart Receiver State MAchine to do the rest
   bInitHartSm = TRUE;
+
 }
 
 
@@ -193,7 +195,7 @@ void initHartRxSm(void)
  * 	 ValidFrame will transition to
  * 	 Done and Error will end
  */
-hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
+void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
 {
   /// HART receive state machine
   typedef enum
@@ -213,9 +215,8 @@ hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every
 
   // Here come the list of Statics
   static BYTE expectedAddrByteCnt;              //!< the number of address bytes expected
-  static WORD hartDataCount;                    //!< The number of data field bytes
   static eRcvState ePresentRcvState = eRcvSom;
-  static BYTE expectedByteCnt;                  //!< The received byte count, to know when we're done
+
   static BYTE calcLrc;
   static unsigned char rcvAddrCount;            //!< The number of address bytes received
   static unsigned char rcvByteCount;            //!< The total number of received bytes, starting with the SOM
@@ -227,8 +228,8 @@ hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every
   {
     bInitHartSm = FALSE;  // Initialization done
     // locals
-    expectedAddrByteCnt = expectedByteCnt = calcLrc = rcvByteCount = rcvAddrCount = totalRcvByteCount = 0;
-    hartDataCount = preambleByteCount = 0;
+    expectedByteCnt = calcLrc = rcvByteCount = rcvAddrCount = totalRcvByteCount = 0;
+    preambleByteCount = 0;
     pRespBuffer = szHartResp;     // Set the transmit pointer back to the beginning of the buffer
     //  stop (if running) the Reply timer
     stopReplyTimerEvent();
@@ -310,7 +311,8 @@ hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every
         HartErrRegister |= EXCESS_PREAMBLE;
         // Set the state machine to Idle, because we're not processing any more bytes on this frame - TO BE VERIFIED
         //  2) prepareToRxFrame();
-        initHartRxSm();++ErrReport[5];
+        initHartRxSm();
+        ++ErrReport[5];
         ++startUpDataLocalV.errorCounter[4];
       }
       // Do not store the character
@@ -498,11 +500,19 @@ hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every
 // remain in the queue, the RTS signal is lowered, and the TX interrupt is disabled.
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
-void hartTransmitterSm(void)
+void hartTransmitterSm(BOOLEAN init)
 {
   static BYTE calcLrc;
-  // if(Init) // We need this pseudostate to init transmitter
-  // calcLrc =0;
+  if(init) // We need this pseudostate to init transmitter
+  {
+    calcLrc =0;
+    // Used for Transmitter - TODO: move to hartTransmitter() once their locals are set
+    respXmitIndex = 0;
+
+
+    return;
+  }
+
 
 
     switch (ePresentXmitState)
@@ -538,9 +548,9 @@ void hartTransmitterSm(void)
     case eXmitIdle:
     default:
         // wait for the last character to leave the shift register
-        while (HART_STAT & UCBUSY);
+        // MH: ======> This is transparent to user: while (HART_STAT & UCBUSY);
         // Drop RTS
-        rtsRcv();
+        //MH: ======> This is transparent to user:  rtsRcv();
         // count the transmitted message
         xmtMsgCounter++;
         // Clear the appropriate cold start bit

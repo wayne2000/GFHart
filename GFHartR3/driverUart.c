@@ -16,8 +16,10 @@
 //==============================================================================
 //  LOCAL DEFINES
 //==============================================================================
-#define HartRxFifoLen   4
-#define HartTxFifoLen   4
+/*  Rx Buffer is just for contention when CPU is busy and avoid overrun     */
+#define HartRxFifoLen   8
+/* We would like to write the whole message to buffer and go to sleep */
+#define HartTxFifoLen   64
 #define HsbRxFifoLen    64
 #define HsbTxFifoLen    32
 
@@ -251,6 +253,7 @@ __interrupt void hartSerialIsr(void)
 
   case 4:                                   // Vector 4 - TXIFG
     //SETB(TP_PORTOUT, TP1_MASK); CLEARB(TP_PORTOUT, TP1_MASK); // signal for Debuging
+    SET_SYSTEM_EVENT(evHartTxChar);         // Send an event to main loop, to send next char
     if(!isEmpty(&hartUart.txFifo))
     {
       hartUart.txChar(getFifo(&hartUart.txFifo));

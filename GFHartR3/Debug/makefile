@@ -2,7 +2,9 @@
 # Automatically-generated file. Do not edit!
 ################################################################################
 
-CG_TOOL_ROOT := /home/marco/ti/ccsv5/tools/compiler/msp430_4.1.2
+SHELL = cmd.exe
+
+CG_TOOL_ROOT := C:/ti/ccsv5/tools/compiler/msp430_4.1.1
 
 ORDERED_OBJS += \
 $(GEN_CMDS__FLAG) \
@@ -10,17 +12,19 @@ $(GEN_CMDS__FLAG) \
 "./protocols.obj" \
 "./merge.obj" \
 "./hartr3.obj" \
+"./hartcommandr3.obj" \
 "./hartMain.obj" \
 "./hardware.obj" \
 "./fifo.obj" \
 "./driverUart.obj" \
+"./common_h_cmdr3.obj" \
 -l"libc.a" \
 "../lnk_msp430f5528.cmd" \
 
 -include ../makefile.init
 
-RM := rm -rf
-RMDIR := rm -rf
+RM := DEL /F
+RMDIR := RMDIR /S/Q
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -120,15 +124,15 @@ all: GFHartR3.out
 GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: MSP430 Linker'
-	"/home/marco/ti/ccsv5/tools/compiler/msp430_4.1.2/bin/cl430" -vmsp --abi=eabi --code_model=small --data_model=small -Ooff -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=240 -m"GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"/home/marco/ti/ccsv5/ccs_base/msp430/include" -i"/home/marco/ti/ccsv5/tools/compiler/msp430_4.1.2/lib" -i"/home/marco/ti/ccsv5/tools/compiler/msp430_4.1.2/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
+	"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/bin/cl430" -vmsp --abi=eabi --code_model=small --data_model=small -Ooff -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=300 -m"GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"C:/ti/ccsv5/ccs_base/msp430/include" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/lib" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 # Other Targets
 clean:
 	-$(RM) $(MSP430_EXECUTABLE_OUTPUTS__QUOTED) "GFHartR3.out"
-	-$(RM) "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "hartr3.pp" "merge.pp" "protocols.pp" "utilitiesr3.pp" 
-	-$(RM) "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartr3.obj" "merge.obj" "protocols.obj" "utilitiesr3.obj" 
+	-$(RM) "common_h_cmdr3.pp" "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "hartcommandr3.pp" "hartr3.pp" "merge.pp" "protocols.pp" "utilitiesr3.pp" 
+	-$(RM) "common_h_cmdr3.obj" "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartcommandr3.obj" "hartr3.obj" "merge.obj" "protocols.obj" "utilitiesr3.obj" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

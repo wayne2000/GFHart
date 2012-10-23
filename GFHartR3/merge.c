@@ -28,11 +28,30 @@
 //========================
 // Do we have a host actively communicating?
 int hostActive = FALSE;
+unsigned char currentMsgSent = NO_CURRENT_MESSAGE_SENT;
+unsigned int flashWriteCount=0;
+long dataTimeStamp = 0;       //!< Data Time Stamp
+
+// Defined in Main9900.c
+// Trim command flags
+unsigned char setToMinValue = FALSE;
+unsigned char setToMaxValue = FALSE;
+// If the update is delayed, set this flag
+int8u updateDelay = FALSE;
+// flags to make sure that the loop value does not
+// get reported if an update is in progress
+unsigned char updateInProgress = FALSE;
+unsigned char updateRequestSent = FALSE;
 
 
-int rcvBroadcastAddr = FALSE;
+
 // 9900 Database
 U_DATABASE_9900 u9900Database;
+
+//These are defined in Main9900.c
+int8u loopMode;
+// Device Variable Status for PV. initialize to BAD, constant
+unsigned char PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;
 
 //========================
 //  LOCAL DATA
@@ -136,9 +155,6 @@ void initStartUpData()
 }
 
 
-
-
-
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
 // Function Name: copy9900factoryDb()
@@ -160,3 +176,28 @@ void copy9900factoryDb(void)
 {
   memcpy(&u9900Database, &factory9900db, sizeof(DATABASE_9900));
 }
+
+
+
+//
+//  define a set of empty functions to allow implementation build sources
+//  TODO: ====>>>  place real code here
+//
+unsigned char setFixedCurrentMode(float cmdValue)
+{
+  unsigned char resp = RESP_SUCCESS;
+  return resp;
+}
+//
+unsigned char trimLoopCurrentZero(float level)
+{
+  unsigned char resp = (LOOP_OPERATIONAL == loopMode) ? INCORRECT_LOOP_MODE : RESP_SUCCESS;
+  return resp;
+}
+//
+unsigned char trimLoopCurrentGain(float level)
+{
+  unsigned char resp = (LOOP_OPERATIONAL == loopMode) ? INCORRECT_LOOP_MODE : RESP_SUCCESS;
+  return resp;
+}
+

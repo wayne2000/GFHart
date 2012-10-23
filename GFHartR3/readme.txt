@@ -1,4 +1,8 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+//	10/23/12
+Added hartcommandr3.x, common_h_cmd.*
+TEMP increase stack from 240 to 300
+-- Still not working as I need to anlize how hartTransmitter() is initialized
 // 10/22/12
 -Receiver State machine design complete
 -Need the processHartCommand() function defined in HartCommand.x

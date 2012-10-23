@@ -19,6 +19,7 @@ typedef enum
 	evNull=0,									//!< Strictly is an event occupying bit location in Event memory, but ordinal gives zero
   //	Hart Receiver
 	evHartRxChar,							//!< Hart receiver has a new element data + status in input stream
+	evHartTxChar,             //!< Hart transmiter has moved a char to shift register for transmission
 	evHartRcvGapTimeout,			//!< Inter-character time exceded
   evHartRcvReplyTimer,			//<! Just a silent time between master command and a slave reply
 
@@ -40,6 +41,7 @@ void _c_int00(void);    //!< Entry point if we are commanded to reset
   *
   */
 extern unsigned int sEvents[];	// Word array where events are stored
+
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/

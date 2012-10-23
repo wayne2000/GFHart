@@ -14,18 +14,6 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
-  ///
-  /// HART receive frame state machine possible results
-  ///
-  typedef enum
-  {
-    hrsIsIdle,            //!<  the internal SM is waiting for preamble
-    hrsRequiresInit,      //!<  current message canceled nothing to do, call again with reset
-    hrsRecvdDone,         //!<  a valid frame and at least one extra byte has been received (current idl
-    hrsResultErrorDump,   //!<  an internal error has been detected - rest of message dumped
-    hrsResultErrorReport, //!<  message wt this point contain errors, mus reply with a status
-    hrsResultBusy         //!<  A frame is being building with no errors so far
-  } hrsResult;
 
 ///
 ///  The following enumeration is for the HART
@@ -70,8 +58,8 @@ typedef enum
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
 // HART Frame Handlers
-hrsResult hartReceiver(WORD data);
-void hartTransmitterSm(void);
+void hartReceiver(WORD data);
+void hartTransmitterSm(BOOLEAN init);
 //
 void initHartRxSm(void);
 void initRespBuffer(void);
@@ -84,7 +72,6 @@ void rtsRcv(void);
 extern unsigned char szHartCmd [];        // The HART Command buffer
 extern unsigned char szHartResp [];       // The HART response buffer
 extern unsigned int respBufferSize;         // The size of the response buffer
-extern int rcvLrcError;                     // Received LRC error flag
 extern int rcvBroadcastAddr;                // broadcas error received flag
 
 extern long dataTimeStamp;                  // Timer added for command 9
@@ -107,12 +94,13 @@ extern unsigned char command;       //!<    MH: Hart received command informaito
 extern int longAddressFlag;
 // address byte index
 extern unsigned char addressStartIdx;
-
 extern unsigned char hartFrameRcvd;         //!< This Flag indicates the reception of a valid Hart Message
 extern unsigned char addressValid;
-
 extern int parityErr;
 extern int overrunErr;
+extern int rcvLrcError;                     // Received LRC error flag
+extern WORD hartDataCount;                  //!< The number of data field bytes
+extern BYTE expectedByteCnt;                //!< The received byte count, to know when we're done
 
 // Command ready for processing flag
 extern int commandReadyToProcess;
