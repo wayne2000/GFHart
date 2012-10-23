@@ -15,7 +15,7 @@
 #include "driverUart.h"
 #include "hartr3.h"
 #include "main9900r3.h"
-
+#include "hardware.h"
 #include "merge.h"
 #include "utilitiesr3.h"
 
@@ -60,11 +60,10 @@ int overrunErr = FALSE;
 
 unsigned char hartFrameRcvd;                //!< Flag is set after a successfully Lrc and address is for us
 eXmitState ePresentXmitState = eXmitIdle;   //!< Set the State machines to idle state
-unsigned char szLrc = 0;                    //!< calculated LRC byte
-unsigned int hartDataCount = 0;             //!< The number of data field bytes
 
-unsigned char expectedAddrByteCnt = 0;      //!< the number of address bytes expected
-unsigned char expectedByteCnt = 0;          //!< The received byte count, to know when we're done
+
+
+
 unsigned int respBufferSize;                //!< size of the response buffer
 int rcvLrcError = FALSE;                    //!< Did the LRC compute OK
 unsigned int HartErrRegister = NO_HART_ERRORS;  //!< The HART error register
@@ -74,8 +73,6 @@ int checkCarrierDetect (void);              //!< other system prototypes
 
 unsigned long xmtMsgCounter = 0;            //!< MH: counts Hart messages at some point in SM
 unsigned char szHartResp [MAX_HART_XMIT_BUF_SIZE];  //!< start w/preambles
-unsigned char lastCharRcvd = 0;
-
 unsigned char szHartCmd [MAX_RCV_BYTE_COUNT];       //!< Rcvd message buffer (start w/addr byte)
 
 //==============================================================================
@@ -83,7 +80,7 @@ unsigned char szHartCmd [MAX_RCV_BYTE_COUNT];       //!< Rcvd message buffer (st
 //==============================================================================
 
 static unsigned char * pRespBuffer = NULL;       //!< Pointer to the response buffer
-
+static BOOLEAN  bInitHartSm = FALSE;
 
 
 
@@ -128,10 +125,57 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 // Index 13 = the number of times the address wasn't valid
 // Index 14 = SPARE
 
+
+/*!
+ * \function    initHartRxSm()
+ *
+ * This function perform the global init of Hart Receiver state machine. Ideally this
+ * functionshould be implemented inside the state function, but the spread of globals
+ * makes this very hard
+ *
+ * Implementation notes:
+ * Here the global variables that were used by previous state machine are reset.
+ * Other variables are initalized internally in the internal init state.
+ * The signal bInitHartSm is set to perform the remainding intialization inside
+ * the function, which is performed when the new character event is captured at main loop
+ *
+ * This function partially replaces prepareToRxFrame(), rest is done at its context
+ */
+void initHartRxSm(void)
+{
+  // Hart Reception Results - Start reply
+  hartFrameRcvd = FALSE;
+  commandReadyToProcess = FALSE;
+  //  Status Report
+  hostActive = FALSE;
+  // Used in processHartCommand(), executeCommand()
+  hartCommand = 0xfe;               // Make the command invalid
+
+  // Hart Error or Status Register
+  HartErrRegister = RCV_BAD_LRC;    // Clear the HART error register, except for the assumed LRC error
+
+  // Used to calculate the Address in Hart Command message -
+  addressStartIdx = 0;          // hart.c::isAddressValid()
+  longAddressFlag = FALSE;
+  addressValid = FALSE;         // hartCommand.c::processHartCommand ()
+
+  // Used for Transmitter - TODO: move to hartTransmitter() once their locals are set
+  respXmitIndex = 0;
+
+  // Sttus of current Cmd Message - used on processHartCommand()
+  rcvLrcError = TRUE;         // Assume an error until the LRC is OK
+  overrunErr = FALSE;
+  parityErr = FALSE;
+
+  // Signal the Hart Receiver State MAchine to do the rest
+  bInitHartSm = TRUE;
+}
+
+
 /*!
  * 	hartReceiver()
  * 	Implement the Hart Receiver state machine
- * 	\param ope	Valid operations = opeInit, opeBuild
+ * 	\param data       Receiver character (lo byte) and its status (Hi byte)
  *
  * 	\returns 	the result of the hart building
  * 	- hrsIdle					the internal SM is waiting for preamble
@@ -142,16 +186,22 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
  * 	- hrsBusy
  *
  * 	 Implementation notes:
+ * 	 The routine is called everytime a new char has arrived at Hart receiver.
+ * 	 The message is built through several internal states. At power Up (or on request) the state is eRccPrepareToRx, when
+ * 	 called it will set all pointers and data to prepare a new reception.
+ *
  * 	 ValidFrame will transition to
  * 	 Done and Error will end
  */
-hrsResult hartReceiver(hrsOperation ope, WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
+hrsResult hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time a HartRxChar event is detected
 {
   /// HART receive state machine
   typedef enum
   {
-    eRcvSom,
-    eRcvAddr,
+    eRcvInit,                 //!<  Set the initial counters and pointer in position
+    //  Follwoing states are the same as described in Documentation
+    eRcvSom,                  //!<  Start of Message  - Idle waiting for Start Delimiter
+    eRcvAddr,                 //!<
     eRcvCmd,
     eRcvByteCount,
     eRcvData,
@@ -162,287 +212,272 @@ hrsResult hartReceiver(hrsOperation ope, WORD data)   //===> BOOLEAN HartReceive
   unsigned char statusReg;
 
   // Here come the list of Statics
+  static BYTE expectedAddrByteCnt;              //!< the number of address bytes expected
+  static WORD hartDataCount;                    //!< The number of data field bytes
   static eRcvState ePresentRcvState = eRcvSom;
-  static unsigned char rcvAddrCount = 0;             //!< The number of address bytes received
-  static unsigned char rcvByteCount = 0;             //!< The total number of received bytes, starting with the SOM
-  static int preambleByteCount = 0;                  //!< the number of preamble bytes received
+  static BYTE expectedByteCnt;                  //!< The received byte count, to know when we're done
+  static BYTE calcLrc;
+  static unsigned char rcvAddrCount;            //!< The number of address bytes received
+  static unsigned char rcvByteCount;            //!< The total number of received bytes, starting with the SOM
+  static WORD preambleByteCount;                //!< the number of preamble bytes received
   static unsigned char totalRcvByteCount;
 
-  //  Operation to initialize the internal State Machine (eq. to prepareToRxFrame
-  if(ope == hrsOpeReset)
+  // Hart Receiver State Machine Initialization - perform before increment error counters
+  if(bInitHartSm ) // Init is a pseudo state -> eRcvSom
   {
-    // start with locals
+    bInitHartSm = FALSE;  // Initialization done
     // locals
-    rcvByteCount = 0;
-    rcvAddrCount = 0;
-    preambleByteCount = 0;
-    totalRcvByteCount = 0;
+    expectedAddrByteCnt = expectedByteCnt = calcLrc = rcvByteCount = rcvAddrCount = totalRcvByteCount = 0;
+    hartDataCount = preambleByteCount = 0;
+    pRespBuffer = szHartResp;     // Set the transmit pointer back to the beginning of the buffer
+    //  stop (if running) the Reply timer
+    stopReplyTimerEvent();
+    // keep the Gap timer active and
+    startGapTimerEvent();
     ePresentRcvState = eRcvSom;   // Set the state machine to look for the start of message
-    // Set the transmit pointer back to the beginning of the buffer
-    pRespBuffer = szHartResp;
-
-
-    return hrsResultIdle;
   }
+  //  Process Received Character
+  nextByte = data;            //  !MH:--> HART_RXBUF;
+  statusReg = data >>8;       //  debugging HART_STAT;
+  kickHartRecTimers();        //  kick the Gap and Response timers, they will generate wake-up events to main loop
+  //
   ++ErrReport[0];
-    // If we are receiving characters, the host is active
-    hostActive = TRUE;
-    // restart the timer => MH do this different startDllTimer();
-    // Check for errors before calling the state machine, since any comm error
-    // resets the state machine
-    statusReg = data >>8;       // debugging HART_STAT;
-    if (statusReg & UCBRK)      //!MH:   Break Detected (all data, parity and stop bits are low)
+  hostActive = TRUE;      //  If we are receiving characters, the host is active
+  //
+  // Check for errors before calling the state machine, since any comm error resets the state machine
+  //
+  //  BRK:  Break Detected (all data, parity and stop bits are low)
+  if (statusReg & UCBRK)      //
+    ++ErrReport[1];           // Status was cleared when happened, just report here
+  //  FE:   Frame error (low stop bit)
+  if (statusReg & UCFE)
+  {
+    HartErrRegister |= RCV_FRAMING_ERROR;
+    ++ErrReport[2];
+    ++startUpDataLocalV.errorCounter[0];
+  }
+  //  OE: Buffer overrun (previous rx overwritten)
+  if (statusReg & UCOE)
+  {
+    // if we're still receiving preamble bytes, just clear the OE flag otherwise, bail on the reception
+    if (eRcvSom != ePresentRcvState)
     {
-        // Just clear the status register, since this break is expected
-      HART_STAT &= ~(UCBRK | UCFE | UCOE | UCPE | UCRXERR);
-        ++ErrReport[1];
-        // return;
+      overrunErr = TRUE;
+      HartErrRegister |= BUFFER_OVERFLOW;
+      ++ErrReport[3];
+      ++startUpDataLocalV.errorCounter[2];
     }
-    // Now capture the character
-    nextByte = data;//getByteHart();   //!MH:--> HART_RXBUF;
-    if (statusReg & UCFE)       //!MH:  Frame error (low stop bit)
-    {
-        HartErrRegister |= RCV_FRAMING_ERROR;
-        ++ErrReport[2];
-       //need to analize this function====>
-      //                        ++startUpDataLocalV.errorCounter[0];
-    }
-    if (statusReg & UCOE)       //!MH:  Buffer overrun (previous rx overwritten)
-    {
-        // if we're still receiving preamble bytes, just clear the OE flag
-        // otherwise, bail on the reception
-        if (eRcvSom != ePresentRcvState)
-        {
-            overrunErr = TRUE;
-            HartErrRegister |= BUFFER_OVERFLOW;
-            ++ErrReport[3];
-            ++startUpDataLocalV.errorCounter[2];
-        }
-        else
-        {
-            HART_STAT &= ~UCOE;   //TODO: This is shuld be removed, as my Status is a copy and out of context
-            ++startUpDataLocalV.errorCounter[14];
-        }
-    }
-    if (statusReg & UCPE)       //MH:   Parity Error
-    {
-        // if the parity error occurs after the command byte, we will respond
-        // with a tx error message. Otherwise, just ignore the message
-        parityErr = TRUE;
-        HartErrRegister |= RCV_PARITY_ERROR;
-        ++ErrReport[4];
-        ++startUpDataLocalV.errorCounter[1];
-    }
+    else
+      ++startUpDataLocalV.errorCounter[14];
 
-    lastCharRcvd = nextByte;
-
-// 2) No good
-    // increment the total byte count
-    totalRcvByteCount++;
-    // The receive state machine
-    // What we do depends on the current state
-    switch (ePresentRcvState)
+  }
+  //  PE: Parity Error
+  if (statusReg & UCPE)
+  {
+    //  if the parity error occurs after the command byte, we will respond with a tx error message.
+    //  Otherwise, just ignore the message
+    parityErr = TRUE;
+    HartErrRegister |= RCV_PARITY_ERROR;
+    ++ErrReport[4];
+    ++startUpDataLocalV.errorCounter[1];
+  }
+  // increment the total byte count
+  totalRcvByteCount++;
+  // The receive state machine: What we do depends on the current state
+  switch (ePresentRcvState)
+  {
+  case eRcvSom:
+    // A parity or framing error here is fatal, so check
+    if ((statusReg & UCPE) || (statusReg & UCFE))
     {
-    case eRcvSom:
-        // A parity or framing error here is fatal, so check
-        if ((statusReg & UCPE) || (statusReg & UCFE))
-        {
-            ++startUpDataLocalV.errorCounter[10];
-            // We are not going to respond, so we will wait until the next message starts
-            prepareToRxFrame();
-            return;
-        }
-        // is it a preamble character?
-        if (HART_PREAMBLE == nextByte)
-        {
-            //intrDcd = TRUE;
-            // increment the preamble byte count
-            ++preambleByteCount;
-            // Check for too many preamble characters
-            if (MAX_PREAMBLE_BYTES < preambleByteCount)
-            {
-                // Set the HART error register
-                HartErrRegister |= EXCESS_PREAMBLE;
-                // Set the state machine to Idle, because we're not processing
-                // any more bytes on this frame - TO BE VERIFIED
-                prepareToRxFrame();
-                ++ErrReport[5];
-                ++startUpDataLocalV.errorCounter[4];
-            }
-            // Do not store the character
-            return;
-        }
-        else if (STX == (nextByte & (FRAME_MASK | EXP_FRAME_MASK)))
-        {
-            if (MIN_PREAMBLE_BYTES > preambleByteCount)
-            {
-                // Set the HART error register
-                HartErrRegister |= INSUFFICIENT_PREAMBLE;
-                // If we haven't seen enough preamble bytes, we are not
-                // going to respond at all, so set the state machine to
-                // idle
-                prepareToRxFrame();
-                errMsgCounter++;
-                ++ErrReport[6];
-                ++startUpDataLocalV.errorCounter[3];
-                return;  // If < 2 preambles, do nothing & return
-            }
-            // How many address bytes to expect?
-            expectedAddrByteCnt = (nextByte & LONG_ADDR_MASK) ? LONG_ADDR_SIZE : SHORT_ADDR_SIZE;
-            addressStartIdx = rcvByteCount+1; // the first address byte is the next character
-            // is this a long address?
-            longAddressFlag = (nextByte & LONG_ADDR_MASK) ? TRUE : FALSE;
-            // change the state
-            ePresentRcvState = eRcvAddr;
-        }
-        else
-        {
-            // Set the HART error register
-            HartErrRegister |= STX_ERROR;
-            // Increment the error counters
-            ++ErrReport[7];
-            errMsgCounter++;
-            ++startUpDataLocalV.errorCounter[5];
-            // Something's wrong. Just set the preamble count back to zero and
-            // start over after recording the error diagnostics
-            prepareToRxFrame();
-            return;
-        }
-        break;
-    case eRcvAddr:
-        // A parity, overrun or framing error here is fatal, so check
-        if ((statusReg & UCPE) || (statusReg & UCFE) || (statusReg & UCOE))
-        {
-            // We are not going to respond, so we will wait until the next message starts
-            prepareToRxFrame();
-            ++startUpDataLocalV.errorCounter[11];
-            return;
-        }
-        // increment the count of the address bytes rcvd
-        ++rcvAddrCount;
-        if (rcvAddrCount == expectedAddrByteCnt)
-        {
-            // Store the last byte of the address here to
-            // make sure that isAddressValid() will work correctly. Do NOT
-            // increment rcvByteCount!!
-            szHartCmd[rcvByteCount] = nextByte;
-            // Check to see if the address is for us. If not, start
-            // looking for the beginning of the next message
-            addressValid = isAddressValid();
-            if (!addressValid)
-            {
-                ++ErrReport[13];
-                ++startUpDataLocalV.errorCounter[15];
-                //prepareToRxFrame(); - BMD removed. Do not start to look
-                // for a new frame until the current one is completely done
-                return;
-            }
-            // we're done with address, move to command
-            ePresentRcvState = eRcvCmd;
-        }
-        break;
-    case eRcvCmd:
-        // ready to receive byte count
-        ePresentRcvState = eRcvByteCount;
-        // signal that the command byte has been received, and we have to
-        // process the command
-        commandReadyToProcess = TRUE;
-        numMsgReadyToProcess++;
-        // Now that we have to respond, set the error register. We'll clear it later if all is OK
-        HartErrRegister |= RCV_BAD_LRC;
-        break;
-    case eRcvByteCount:
-        // A parity, overrun or framing error here is fatal, so check
-        if ((statusReg & UCPE) || (statusReg & UCFE) || (statusReg & UCOE))
-        {
-            ++startUpDataLocalV.errorCounter[12];
-            // We are not going to respond, so we will wait until the next message starts
-            prepareToRxFrame();
-            return;
-        }
-        expectedByteCnt = nextByte;
-        if (expectedByteCnt > MAX_HART_DATA_SIZE)
-        {
-            HartErrRegister |= RCV_BAD_BYTE_COUNT;
-            prepareToRxFrame();
-            ++ErrReport[8];
-            errMsgCounter++;
-            ++startUpDataLocalV.errorCounter[7];
-        }
-        else if (0 == expectedByteCnt)
-        {
-            ePresentRcvState = eRcvLrc;
-        }
-        else
-        {
-            hartDataCount = 0;
-            ePresentRcvState = eRcvData;
-        }
-        break;
-    case eRcvData:
-        ++hartDataCount;
-        // Are we done?
-        if (hartDataCount == expectedByteCnt)
-        {
-            ePresentRcvState = eRcvLrc;
-        }
-        break;
-    case eRcvLrc:
-        if (szLrc == nextByte)
-        {
-            // Clear the bad CRC error
-            HartErrRegister &= ~RCV_BAD_LRC;
-            // process the command
-            rcvLrcError = FALSE;
-        }
-        else
-        {
-            rcvLrcError = TRUE;
-            HartErrRegister |= RCV_BAD_LRC;
-            ++ErrReport[9];
-            ++startUpDataLocalV.errorCounter[6];
-        }
-        // If the address is for us, pick up extra characters
-        // If the message isn't for us, start looking for a new message asap
-        if (addressValid)
-        {
-            hartFrameRcvd = TRUE;
-            ePresentRcvState = eRcvXtra;
-        }
-        else
-        {
-            prepareToRxFrame();
-        }
-        break;
-    case eRcvXtra:
-        HartErrRegister |= EXTRA_CHAR_RCVD;
-//#ifdef STORE_EXTRA_CHARS
-        if (FALSE == checkCarrierDetect())
-        {
-            HartErrRegister |= EXTRA_CHAR_RCVD;
-        }
-        break;
-//#else#endif
-    default:
-        ++ErrReport[10];
+      ++startUpDataLocalV.errorCounter[10];
+      // We are not going to respond, so we will wait until the next message starts
 
-        // Get ready for the next message
-        prepareToRxFrame();
-        // Do not store the character
+      // 1) prepareToRxFrame();
+      initHartRxSm();
+      return;
+    }
+    // is it a preamble character?
+    if (HART_PREAMBLE == nextByte)
+    {
+      //intrDcd = TRUE;
+      // increment the preamble byte count
+      ++preambleByteCount;
+      // Check for too many preamble characters
+      if (MAX_PREAMBLE_BYTES < preambleByteCount)
+      {
+        // Set the HART error register
+        HartErrRegister |= EXCESS_PREAMBLE;
+        // Set the state machine to Idle, because we're not processing any more bytes on this frame - TO BE VERIFIED
+        //  2) prepareToRxFrame();
+        initHartRxSm();++ErrReport[5];
+        ++startUpDataLocalV.errorCounter[4];
+      }
+      // Do not store the character
+      return;
+    }
+    else
+    if (STX == (nextByte & (FRAME_MASK | EXP_FRAME_MASK)))
+    {
+      if (MIN_PREAMBLE_BYTES > preambleByteCount)
+      {
+        // Set the HART error register
+        HartErrRegister |= INSUFFICIENT_PREAMBLE;
+        // If we haven't seen enough preamble bytes, we are not going to respond at all, so set the state machine to idle
+        //  3)prepareToRxFrame();
+        initHartRxSm();
+        errMsgCounter++;
+        ++ErrReport[6];
+        ++startUpDataLocalV.errorCounter[3];
+        return;  // If < 2 preambles, do nothing & return
+      }
+      // How many address bytes to expect?
+      expectedAddrByteCnt = (nextByte & LONG_ADDR_MASK) ? LONG_ADDR_SIZE : SHORT_ADDR_SIZE;
+      addressStartIdx = rcvByteCount+1; // the first address byte is the next character
+      // is this a long address?
+      longAddressFlag = (nextByte & LONG_ADDR_MASK) ? TRUE : FALSE;
+      // change the state
+      ePresentRcvState = eRcvAddr;
+    }
+    else
+    {
+      // Set the HART error register
+      HartErrRegister |= STX_ERROR;
+      // Increment the error counters
+      ++ErrReport[7];
+      errMsgCounter++;
+      ++startUpDataLocalV.errorCounter[5];
+      // Something's wrong. Just set the preamble count back to zero and start over after recording the error diagnostics
+      //  4) prepareToRxFrame();
+      initHartRxSm();
+      return;
+    }
+    break;
+  case eRcvAddr:
+    // A parity, overrun or framing error here is fatal, so check
+    if ((statusReg & UCPE) || (statusReg & UCFE) || (statusReg & UCOE))
+    {
+      // We are not going to respond, so we will wait until the next message starts
+      // 5) prepareToRxFrame();
+      initHartRxSm();
+      ++startUpDataLocalV.errorCounter[11];
+      return;
+    }
+    // increment the count of the address bytes rcvd
+    ++rcvAddrCount;
+    if (rcvAddrCount == expectedAddrByteCnt)
+    {
+      // Store the last byte of the address here to
+      // make sure that isAddressValid() will work correctly. Do NOT
+      // increment rcvByteCount!!
+      szHartCmd[rcvByteCount] = nextByte;
+      // Check to see if the address is for us. If not, start
+      // looking for the beginning of the next message
+      addressValid = isAddressValid();
+      if (!addressValid)
+      {
+        ++ErrReport[13];
+        ++startUpDataLocalV.errorCounter[15];
+        // x) prepareToRxFrame(); - BMD removed. Do not start to look for a new frame until the current one is completely done
+        // MH: Agree with BMD
         return;
+      }
+      // we're done with address, move to command
+      ePresentRcvState = eRcvCmd;
     }
-    // Make sure we don't overrun the buffer
-    if (MAX_RCV_BYTE_COUNT > rcvByteCount)
+    break;
+  case eRcvCmd:
+    // ready to receive byte count
+    ePresentRcvState = eRcvByteCount;
+    // signal that the command byte has been received, and we have to process the command
+    commandReadyToProcess = TRUE;
+    numMsgReadyToProcess++;
+    // Now that we have to respond, set the error register. We'll clear it later if all is OK
+    HartErrRegister |= RCV_BAD_LRC;
+    break;
+  case eRcvByteCount:
+    // A parity, overrun or framing error here is fatal, so check
+    if ((statusReg & UCPE) || (statusReg & UCFE) || (statusReg & UCOE))
     {
-        ++ErrReport[11];
-        // build the command buffer if we're not idle
-        szHartCmd[rcvByteCount] = nextByte;
-        ++rcvByteCount;
+      ++startUpDataLocalV.errorCounter[12];
+      // We are not going to respond, so we will wait until the next message starts
+      // 6) prepareToRxFrame();
+      initHartRxSm();
+      return;
     }
-    // calc the LRC
-    calculateLrc(nextByte);
-    ++ErrReport[12];
-
+    expectedByteCnt = nextByte;
+    if (expectedByteCnt > MAX_HART_DATA_SIZE) //MH This never happens, as left value is byte and right is 255
+    {
+      HartErrRegister |= RCV_BAD_BYTE_COUNT;
+      // 7) prepareToRxFrame();
+      initHartRxSm();
+      ++ErrReport[8];
+      errMsgCounter++;
+      ++startUpDataLocalV.errorCounter[7];
+    }
+    else
+      if (0 == expectedByteCnt)
+        ePresentRcvState = eRcvLrc;
+      else
+      {
+        hartDataCount = 0;
+        ePresentRcvState = eRcvData;
+      }
+    break;
+  case eRcvData:
+    ++hartDataCount;
+    // Are we done?
+    if (hartDataCount == expectedByteCnt)
+      ePresentRcvState = eRcvLrc;
+    break;
+  case eRcvLrc:
+    if (calcLrc == nextByte)
+    {
+      HartErrRegister &= ~RCV_BAD_LRC;  // Clear the bad CRC error
+      rcvLrcError = FALSE;              // process the command
+    }
+    else
+    {
+      rcvLrcError = TRUE;
+      HartErrRegister |= RCV_BAD_LRC;
+      ++ErrReport[9];
+      ++startUpDataLocalV.errorCounter[6];
+    }
+    // If the address is for us, pick up extra characters
+    // If the message isn't for us, start looking for a new message asap
+    if (addressValid)
+    {
+      hartFrameRcvd = TRUE;
+      // We are using the single hartFrameRcvd flag for Gap/Reply
+      stopGapTimerEvent();      // extras are don't cares for hart command message
+      startReplyTimerEvent();   // Now we have enough data to send a Reply
+      ePresentRcvState = eRcvXtra;
+    }
+    else      // 8) prepareToRxFrame();
+      initHartRxSm();
+    break;
+  case eRcvXtra:
+    HartErrRegister |= EXTRA_CHAR_RCVD;
+    //#ifdef STORE_EXTRA_CHARS
+    if (FALSE == checkCarrierDetect())
+      HartErrRegister |= EXTRA_CHAR_RCVD;
+    break;
+    //#else#endif
+  default:
+    ++ErrReport[10];
+    // 9) prepareToRxFrame();   // Get ready for the next message
+    initHartRxSm();
+    return;               // Do not store the character
+  }
+  // Here we build the Hart Command Buffer & calc LRC - Not idle, or msg cancelled
+  if (MAX_RCV_BYTE_COUNT > rcvByteCount)  // Make sure we don't overrun the buffer
+  {
+    ++ErrReport[11];
+    szHartCmd[rcvByteCount] = nextByte;
+    ++rcvByteCount;
+  }
+  calcLrc ^= nextByte;  // calculateLrc(nextByte);
+  ++ErrReport[12];
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -465,12 +500,16 @@ hrsResult hartReceiver(hrsOperation ope, WORD data)   //===> BOOLEAN HartReceive
 ///////////////////////////////////////////////////////////////////////////////////////////
 void hartTransmitterSm(void)
 {
+  static BYTE calcLrc;
+  // if(Init) // We need this pseudostate to init transmitter
+  // calcLrc =0;
+
 
     switch (ePresentXmitState)
     {
     case eXmitPreamble:
         // Send a preamble character
-        putByteHart(HART_PREAMBLE); // write the character to Hart outstream
+      putcUart(HART_PREAMBLE, &hartUart);// write the character to Hart outstream
         if (0 == --respXmitIndex)
         {
             ePresentXmitState = eXmitAck;
@@ -490,7 +529,7 @@ void hartTransmitterSm(void)
         }
         break;
     case eXmitLrc:
-      putByteHart(szLrc);
+      putcUart(calcLrc, &hartUart);
       ePresentXmitState = eXmitDone;
         // Enable the transmit interrupt
         //MH enableTxIntr();
@@ -522,7 +561,8 @@ void hartTransmitterSm(void)
         }
 
         // Get ready for next frame
-        prepareToRxFrame();
+        // 10) prepareToRxFrame();
+        initHartRxSm();
         // Set the xmit state to idle
         ePresentXmitState = eXmitIdle;
         return;
@@ -530,9 +570,9 @@ void hartTransmitterSm(void)
     if (eXmitPreamble != ePresentXmitState)
     {
     // Calculate the LRC
-    calculateLrc(*pRespBuffer);
+    calcLrc ^= *pRespBuffer;  // calculateLrc(*pRespBuffer);
     // Transmit the character
-    putByteHart(*pRespBuffer );
+    putcUart(*pRespBuffer, &hartUart);
     // Move to the next character
     pRespBuffer++;
     // re-enable the transmit interrupt
@@ -571,49 +611,6 @@ int checkCarrierDetect (void)
     return rtnVal;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: prepareToRxFrame()
-//
-// Description:
-//
-// Set up the receive state machine, counters, and flags to receive a new frame
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-void prepareToRxFrame(void)
-{
-  // Sort by scope (Globals first)
-  hartFrameRcvd = FALSE;
-  szLrc = 0;                    // Set the LRC to 0
-  hartCommand = 0xfe;               // Make the command invalid
-  hostActive = FALSE;
-  // Clear the HART error register, except for the assumed LRC error
-  HartErrRegister = RCV_BAD_LRC;
-
-  // Set all the counters to 0
-  hartDataCount = 0;
-  expectedByteCnt = 0;
-  expectedAddrByteCnt = 0;
-  addressStartIdx = 0;
-  respXmitIndex = 0;
-  // set the flags to false
-  longAddressFlag = FALSE;
-  rcvLrcError = TRUE; // Assume an error until the LRC is OK
-  commandReadyToProcess = FALSE;
-  addressValid = FALSE;
-  overrunErr = FALSE;
-  parityErr = FALSE;
-
-  hartReceiver(hrsOpeReset, 0);
-
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

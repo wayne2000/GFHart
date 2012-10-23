@@ -19,19 +19,13 @@
   ///
   typedef enum
   {
-    hrsResultIdle,        //!<  the internal SM is waiting for preamble
-    hrsResultValidFrame,  //!<  Valid frame with the address of this module has been received
-    hrsResultDone,        //!<  a valid frame and at least one extra byte has been received (current idl
+    hrsIsIdle,            //!<  the internal SM is waiting for preamble
+    hrsRequiresInit,      //!<  current message canceled nothing to do, call again with reset
+    hrsRecvdDone,         //!<  a valid frame and at least one extra byte has been received (current idl
     hrsResultErrorDump,   //!<  an internal error has been detected - rest of message dumped
     hrsResultErrorReport, //!<  message wt this point contain errors, mus reply with a status
     hrsResultBusy         //!<  A frame is being building with no errors so far
   } hrsResult;
-  typedef enum
-    {
-      hrsOpeReset,       //!<  Initialize the Hart Frame Receiver
-      hrsOpeBuild        //!<  Build the frame
-    } hrsOperation;
-
 
 ///
 ///  The following enumeration is for the HART
@@ -76,11 +70,10 @@ typedef enum
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
 // HART Frame Handlers
-hrsResult hartReceiver(hrsOperation ope, WORD data);
+hrsResult hartReceiver(WORD data);
 void hartTransmitterSm(void);
 //
-void incrementDllTimer(void);
-void prepareToRxFrame(void);
+void initHartRxSm(void);
 void initRespBuffer(void);
 void rtsRcv(void);
 
@@ -91,12 +84,9 @@ void rtsRcv(void);
 extern unsigned char szHartCmd [];        // The HART Command buffer
 extern unsigned char szHartResp [];       // The HART response buffer
 extern unsigned int respBufferSize;         // The size of the response buffer
-extern unsigned char szLrc;                 // The calculated longitudinal parity byte
 extern int rcvLrcError;                     // Received LRC error flag
 extern int rcvBroadcastAddr;                // broadcas error received flag
-extern unsigned int hartDataCount;          // The number of data field bytes
-extern unsigned char expectedAddrByteCnt;   // the number of address bytes expected
-extern unsigned char expectedByteCnt;       // The received byte count, to know when we're done
+
 extern long dataTimeStamp;                  // Timer added for command 9
 extern float lastRequestedCurrentValue;     // The laast commanded current from command 40
 
@@ -143,29 +133,6 @@ extern unsigned int HartErrRegister;
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: calculateLrc()
-//
-// Description:
-//
-// Calculates the LRC using the next received byte
-//
-// Parameters: unsigned char byte - the next byte to calculate
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void calculateLrc(unsigned char byte)
-{
-    szLrc ^= byte;
-}
 
 
 

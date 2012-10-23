@@ -70,8 +70,7 @@ void initSystem(void)
   // last setup of peripheral interrupts
   disableHartTxIntr();
   enableHartRxIntr();
-  //MH --> rename Clean out any leftovers
-  prepareToRxFrame();
+  initHartRxSm();       // Init Global part, static are intialized at first call
 
 
   // Merging original code = higher level inits
@@ -151,29 +150,56 @@ void main()
   // hartReceiverSm(INIT);
   tEvent systemEvent;
 
-  // Prepare one frame (this should be part of the state machine)
-  prepareToRxFrame();
+
+  initHartRxSm();                   // Init Global part, static are intialized at first call
   while(1)													// continuous loop
   {
   	systemEvent = waitForEvent();
   	switch(systemEvent)
   	{
   	case evHartRxChar:
-  		kickHartRecTimers();					//	GapTimer and Response Timer
   		// Just test we are receiving a 475 Frame
-  		hartReceiver(hrsOpeBuild, getwUart(&hartUart));
+  		hartReceiver(getwUart(&hartUart));
   		break;
 
   	case evHartRcvGapTimeout:
-  	  SETB(TP_PORTOUT, TP1_MASK);   // TP1 indicates time to stabilize XT1 & DCO
+  	  if(hartFrameRcvd ==FALSE)               // Cancel current Hart Command Message, prepare to Rx a new one
+  	    initHartRxSm();
+  	  HartErrRegister |= GAP_TIMER_EXPIRED;   // Record the Fault
+  	  stopGapTimerEvent();                    // Once message cancel is ack, it's ok to turn-off gap check
+  	  SETB(TP_PORTOUT, TP1_MASK);
   	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();
   	  CLEARB(TP_PORTOUT, TP1_MASK);
   	  break;
+
   	case evHartRcvReplyTimer:
-  	  SETB(TP_PORTOUT, TP2_MASK);   // TP2 indicates time to stabilize XT1 & DCO
-  	  _no_operation();_no_operation();_no_operation();_no_operation();_no_operation();
-  	  CLEARB(TP_PORTOUT, TP2_MASK);
-  		break;
+  	  // Process the frame (same as original project)
+  	  if (commandReadyToProcess)
+  	  {
+  	    SETB(TP_PORTOUT,TP2_MASK);
+  	    // clear the flag
+  	    commandReadyToProcess = FALSE;
+  	    // Initialize the response buffer
+  	    initRespBuffer();
+  	    // Process the HART command
+  	    if (processHartCommand() && !doNotRespond)
+  	    {
+  	      // If cmdReset is true && cmd reset response is false, then execute this
+  	      // ship the HART response
+  	      sendHartFrame();
+  	      // Start the process, and cache the Isr code
+  	      hartTransmitterSm();
+  	    }
+  	    else
+  	      // This command was not for this address or invalid
+  	    {
+  	      // Get ready to start another frame
+  	      initHartRxSm();
+  	    }
+  	    CLEARB(TP_PORTOUT,TP2_MASK);
+  	  }
+  	  stopReplyTimerEvent();        // One Reply per command
+  	  break;
   	case evTimerTick:
   		SistemTick125mS =0;						// every 2 secs we get here
   		break;

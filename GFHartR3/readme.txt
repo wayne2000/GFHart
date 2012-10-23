@@ -1,4 +1,8 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+// 10/22/12
+-Receiver State machine design complete
+-Need the processHartCommand() function defined in HartCommand.x
+ 
 //	10/18/12 - The original receiver works with Rx/Driver!!
 1) Merging files from the original (trimmed) project
 2) added files will have a "r3" suffix in its name: hartr3, utilitiesr3, main9900r3
@@ -13,6 +17,7 @@ GOAL is to =>>  Validate a RX 475 communicator frame, RX a command and TX a resp
 - copy files from \git\HartGitHub\HartFw3 project (win - cloned from GitHub)
 	- marco/git/Hart/HartFw3	(linux)
 
+Compiler requires processHartCommand() need to add files
 - Rx Fifo stores received byte with status
 - Using events to enter main loop
 - define a version of hartReceiverSm()

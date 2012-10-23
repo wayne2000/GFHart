@@ -375,16 +375,16 @@ int isAddressValid(void)
 void sendHartFrame (void)
 {
 	// clear the Lrc byte
-	szLrc = 0;
+	// szLrc = 0; MH need to start the calcLrc
 	// Set the transmit state machine to send a preamble
 	ePresentXmitState = eXmitPreamble;
 	// set up to transmit the right number of preambles
 	respXmitIndex = XMIT_PREAMBLE_BYTES;
-	//MH Note that Right order is: 1) prepare RTS 2) Write to SBUF 3) Enable TX IE.
+	//MH changes are: TXIE is always set, putcUart controls RTS line
 	// Enable the transmit interrupt
-	enableTxIntr();
+	// enableTxIntr();
 	// Turn on RTS
-	rtsXmit();
+	// rtsXmit();
 	// send the first preamble byte
 	// HART_TXBUF = HART_PREAMBLE; (it was commented out)
 
