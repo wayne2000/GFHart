@@ -44,7 +44,6 @@
 unsigned char hartCommand = 0xff;
 unsigned char addressValid = FALSE;
 unsigned char hartFrameRcvd;                //!< Flag is set after a successfully Lrc and address is for us
-eXmitState ePresentXmitState = eXmitIdle;   //!< Set the State machines to idle state
 WORD hartDataCount;                         //!< The number of data field bytes
 BYTE expectedByteCnt;                       //!< The received byte count, to know when we're done
 int longAddressFlag = FALSE;              //!< long address flag
@@ -76,7 +75,7 @@ unsigned char szHartCmd [MAX_RCV_BYTE_COUNT];       //!< Rcvd message buffer (st
 //  LOCAL DATA
 //==============================================================================
 
-static unsigned char * pRespBuffer = NULL;       //!< Pointer to the response buffer
+// detect compile error static unsigned char * pRespBuffer = NULL;       //!< Pointer to the response buffer
 static BOOLEAN  bInitHartSm = FALSE;
 
 
@@ -160,8 +159,6 @@ void initHartRxSm(void)
   hartDataCount = 0;            //!< The number of data field bytes
   expectedByteCnt = 0;          //!< The received byte count, to know when we're done
 
-  // Used for Transmitter - TODO: move to hartTransmitter() once their locals are set
-  //respXmitIndex = 0;
 
   // Sttus of current Cmd Message - used on processHartCommand()
   rcvLrcError = TRUE;         // Assume an error until the LRC is OK
@@ -230,11 +227,9 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     // locals
     expectedByteCnt = calcLrc = rcvByteCount = rcvAddrCount = totalRcvByteCount = 0;
     preambleByteCount = 0;
-    pRespBuffer = szHartResp;     // Set the transmit pointer back to the beginning of the buffer
+    //pRespBuffer = szHartResp;     // Set the transmit pointer back to the beginning of the buffer
     //  stop (if running) the Reply timer
     stopReplyTimerEvent();
-    // keep the Gap timer active and
-    startGapTimerEvent();
     ePresentRcvState = eRcvSom;   // Set the state machine to look for the start of message
   }
   //  Process Received Character
@@ -340,6 +335,9 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
       longAddressFlag = (nextByte & LONG_ADDR_MASK) ? TRUE : FALSE;
       // change the state
       ePresentRcvState = eRcvAddr;
+      // Start Checking time between chars as a valid frame has started
+      startGapTimerEvent();
+
     }
     else
     {
@@ -433,6 +431,10 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
       ePresentRcvState = eRcvLrc;
     break;
   case eRcvLrc:
+    // We are using the single hartFrameRcvd flag for Gap/Reply
+    stopGapTimerEvent();      // extras are don't cares for hart command message
+    startReplyTimerEvent();   // Now we have enough data to send a Reply
+
     if (calcLrc == nextByte)
     {
       HartErrRegister &= ~RCV_BAD_LRC;  // Clear the bad CRC error
@@ -450,9 +452,6 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     if (addressValid)
     {
       hartFrameRcvd = TRUE;
-      // We are using the single hartFrameRcvd flag for Gap/Reply
-      stopGapTimerEvent();      // extras are don't cares for hart command message
-      startReplyTimerEvent();   // Now we have enough data to send a Reply
       ePresentRcvState = eRcvXtra;
     }
     else      // 8) prepareToRxFrame();
@@ -480,115 +479,6 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
   }
   calcLrc ^= nextByte;  // calculateLrc(nextByte);
   ++ErrReport[12];
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: hartTransmitterSm()
-//
-// Description:
-//
-// Hart Transmitter State machine controls the sending of the Hart response message
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// Puts the next character in the TX queue into the UART TX buffer. If no characters
-// remain in the queue, the RTS signal is lowered, and the TX interrupt is disabled.
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-void hartTransmitterSm(BOOLEAN init)
-{
-  static BYTE calcLrc;
-  if(init) // We need this pseudostate to init transmitter
-  {
-    calcLrc =0;
-    // Used for Transmitter - TODO: move to hartTransmitter() once their locals are set
-    respXmitIndex = 0;
-
-
-    return;
-  }
-
-
-
-    switch (ePresentXmitState)
-    {
-    case eXmitPreamble:
-        // Send a preamble character
-      putcUart(HART_PREAMBLE, &hartUart);// write the character to Hart outstream
-        if (0 == --respXmitIndex)
-        {
-            ePresentXmitState = eXmitAck;
-        }
-        // Enable the transmit interrupt
-        //MH enableTxIntr();
-        return;
-    case eXmitAck:
-        respXmitIndex = (szHartResp[0] & LONG_ADDR_MASK) ? (szHartResp[LONG_COUNT_OFFSET] +
-            LONG_COUNT_OFFSET) : (szHartResp[SHORT_COUNT_OFFSET] + SHORT_COUNT_OFFSET);
-        ePresentXmitState = eXmitCtrlData;
-        break;
-    case eXmitCtrlData:
-        if (0 == --respXmitIndex)
-        {
-            ePresentXmitState = eXmitLrc;
-        }
-        break;
-    case eXmitLrc:
-      putcUart(calcLrc, &hartUart);
-      ePresentXmitState = eXmitDone;
-        // Enable the transmit interrupt
-        //MH enableTxIntr();
-        return;
-    case eXmitDone:
-    case eXmitIdle:
-    default:
-        // wait for the last character to leave the shift register
-        // MH: ======> This is transparent to user: while (HART_STAT & UCBUSY);
-        // Drop RTS
-        //MH: ======> This is transparent to user:  rtsRcv();
-        // count the transmitted message
-        xmtMsgCounter++;
-        // Clear the appropriate cold start bit
-        if (startUpDataLocalV.fromPrimary)
-        {
-            clrPrimaryStatusBits(FD_STATUS_COLD_START);
-        }
-        else
-        {
-            clrSecondaryStatusBits(FD_STATUS_COLD_START);
-        }
-        // If cmdReset is set and we are here, we should not respond
-        // again until we emerge from the reset, so set the do not respond
-        // flag
-        if (TRUE == cmdReset)
-        {
-            doNotRespond = TRUE;
-        }
-
-        // Get ready for next frame
-        // 10) prepareToRxFrame();
-        initHartRxSm();
-        // Set the xmit state to idle
-        ePresentXmitState = eXmitIdle;
-        return;
-    }
-    if (eXmitPreamble != ePresentXmitState)
-    {
-    // Calculate the LRC
-    calcLrc ^= *pRespBuffer;  // calculateLrc(*pRespBuffer);
-    // Transmit the character
-    putcUart(*pRespBuffer, &hartUart);
-    // Move to the next character
-    pRespBuffer++;
-    // re-enable the transmit interrupt
-    //MH enableTxIntr();
-    }
-
 }
 
 
@@ -679,3 +569,61 @@ void initRespBuffer(void)
 {
     P4OUT |= BIT0;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////
+//
+// Function Name: sendHartFrame()
+//
+// Description:
+//
+// Starts the transmit of the completed response
+//
+// Parameters: void
+//
+// Return Type: void.
+//
+// Implementation notes:
+//  pRespBuffer
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////
+void sendHartFrame (void)
+{
+
+  WORD i;
+  BYTE calcLrc =0;
+
+  //  Send preambles
+  for(i=0; i < XMIT_PREAMBLE_BYTES; ++i)
+    putcUart(HART_PREAMBLE, &hartUart);// write the character to Hart outstream
+
+  // Send the response buffer
+  WORD nTotal = (szHartResp[0] & LONG_ADDR_MASK) ?    \
+      (szHartResp[LONG_COUNT_OFFSET] + LONG_COUNT_OFFSET) :   \
+      (szHartResp[SHORT_COUNT_OFFSET] + SHORT_COUNT_OFFSET);
+  for(i=0; i< nTotal; ++i)
+  {
+    calcLrc ^= szHartResp[i];              // Calculate the LRC
+    putcUart(szHartResp[i], &hartUart);    // Transmit the character
+  }
+  // Send calculated Lrc
+  putcUart(calcLrc, &hartUart);
+  // count the transmitted message
+  xmtMsgCounter++;
+  // Clear the appropriate cold start bit
+  if (startUpDataLocalV.fromPrimary)
+
+    clrPrimaryStatusBits(FD_STATUS_COLD_START);
+  else
+    clrSecondaryStatusBits(FD_STATUS_COLD_START);
+  //TODO: Need to investigate all this section in Hart
+  //  If cmdReset is set and we are here, we should not respond again until we emerge from the reset,
+  //  so set the do not respondflag
+  if (TRUE == cmdReset)
+    doNotRespond = TRUE;
+  // Get ready for next frame
+  // 10) prepareToRxFrame();
+  initHartRxSm();
+  }
+
+

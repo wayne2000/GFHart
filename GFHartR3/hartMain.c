@@ -50,7 +50,6 @@ void initSystem(void);
 //  GLOBAL DATA
 //==============================================================================
 unsigned int sEvents[1 + (evLastEvent +1)/16];	// Array where events are stored
-
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -73,6 +72,7 @@ void initSystem(void)
   disableHartTxIntr();
   enableHartRxIntr();
   initHartRxSm();       // Init Global part, static are intialized at first call
+
 
 
   // Merging original code = higher level inits
@@ -153,6 +153,8 @@ void main()
   // hartReceiverSm(INIT);
   tEvent systemEvent;
 
+  volatile BYTE a = bigTable[10]; // just test EV version
+
 
   initHartRxSm();                   // Init Global part, static are intialized at first call
   while(1)													// continuous loop
@@ -165,11 +167,7 @@ void main()
   	  // Just test we are receiving a 475 Frame
   		hartReceiver(getwUart(&hartUart));
 
-  		// TODO until I know better how Hart retries, lets keep alive the gap interrupt
-  		//  everytime we receive a character
-  		//startGapTimerEvent();
-
-      CLEARB(TP_PORTOUT, TP1_MASK);
+  		CLEARB(TP_PORTOUT, TP1_MASK);
   		break;
 
   	case evHartRcvGapTimeout:
@@ -194,17 +192,14 @@ void main()
   	      // If cmdReset is true && cmd reset response is false, then execute this
   	      // ship the HART response
   	      sendHartFrame();
-  	      //  First reset the internal sm
-  	      hartTransmitterSm(TRUE);
-  	      // Send the whole frame
-  	      while( ePresentXmitState != eXmitPreamble || ePresentXmitState != eXmitDone)
-  	        hartTransmitterSm(FALSE);
+  	      // hartTransmitterSm(TRUE);
+
   	    }
   	    else
   	      // This command was not for this address or invalid
   	    {
   	      // Get ready to start another frame
-  	      //initHartRxSm(); //MH: TODO: Look for side effects on Globals
+  	      initHartRxSm(); //MH: TODO: Look for side effects on Globals
 
   	    }
   	  }
@@ -212,7 +207,7 @@ void main()
   	  break;
 
   	case evHartTxChar:              // Keep calling Transmitter until complete
-  	  TOGGLEB(TP_PORTOUT,TP2_MASK);
+  	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
   	  //if(!isTxEmpty(&hartUart))    // need to debug the whole transmission
   	  //hartTransmitterSm();
   	  break;

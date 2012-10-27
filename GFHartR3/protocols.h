@@ -15,20 +15,6 @@
   *   $DEFINES
 *************************************************************************/
 
-///
-///  The following enumeration is for the HART
-///  transmit state machine
-///
-typedef enum
-{
-    eXmitIdle,
-    eXmitPreamble,
-    eXmitAck,
-    eXmitCtrlData,
-    eXmitLrc,
-    eXmitXtraChar, //
-    eXmitDone
-} eXmitState;
 
 // Defines
 #define HART_PREAMBLE       0xFF
@@ -59,7 +45,7 @@ typedef enum
 *************************************************************************/
 // HART Frame Handlers
 void hartReceiver(WORD data);
-void hartTransmitterSm(BOOLEAN init);
+void sendHartFrame (void);
 //
 void initHartRxSm(void);
 void initRespBuffer(void);
@@ -76,10 +62,6 @@ extern int rcvBroadcastAddr;                // broadcas error received flag
 
 extern long dataTimeStamp;                  // Timer added for command 9
 extern float lastRequestedCurrentValue;     // The laast commanded current from command 40
-
-// exported xmit & rcv FSM state variables
-extern eXmitState ePresentXmitState;
-extern unsigned int respXmitIndex;
 
 // Message Counters
 extern unsigned long xmtMsgCounter;

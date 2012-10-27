@@ -19,7 +19,7 @@
 /*  Rx Buffer is just for contention when CPU is busy and avoid overrun     */
 #define HartRxFifoLen   8
 /* We would like to write the whole message to buffer and go to sleep */
-#define HartTxFifoLen   64
+#define HartTxFifoLen   80
 #define HsbRxFifoLen    64
 #define HsbTxFifoLen    32
 

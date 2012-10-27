@@ -48,7 +48,7 @@
 #include "hardware.h"
 #include "protocols.h"
 #include "hartr3.h"
-#include "Main9900r3.h"
+#include "main9900r3.h"
 #include "utilitiesr3.h"
 #include "common_h_cmdr3.h"
 #include "merge.h"

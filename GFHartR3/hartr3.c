@@ -355,40 +355,6 @@ int isAddressValid(void)
 	return isValid;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: sendHartFrame()
-//
-// Description:
-//
-// Starts the transmit of the completed response 
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void sendHartFrame (void)
-{
-	// clear the Lrc byte
-	// szLrc = 0; MH need to start the calcLrc
-	// Set the transmit state machine to send a preamble
-	ePresentXmitState = eXmitPreamble;
-	// set up to transmit the right number of preambles
-	respXmitIndex = XMIT_PREAMBLE_BYTES;
-	//MH changes are: TXIE is always set, putcUart controls RTS line
-	// Enable the transmit interrupt
-	// enableTxIntr();
-	// Turn on RTS
-	// rtsXmit();
-	// send the first preamble byte
-	// HART_TXBUF = HART_PREAMBLE; (it was commented out)
-
-}
 
 // LRC Functions
 
