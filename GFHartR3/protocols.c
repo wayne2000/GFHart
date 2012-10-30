@@ -591,8 +591,8 @@ void sendHartFrame (void)
 {
 
   WORD i;
-  BYTE calcLrc =0;
-
+  volatile BYTE calcLrc =0;
+  _no_operation();	// debug point
   //  Send preambles
   for(i=0; i < XMIT_PREAMBLE_BYTES; ++i)
     putcUart(HART_PREAMBLE, &hartUart);// write the character to Hart outstream
@@ -601,7 +601,7 @@ void sendHartFrame (void)
   WORD nTotal = (szHartResp[0] & LONG_ADDR_MASK) ?    \
       (szHartResp[LONG_COUNT_OFFSET] + LONG_COUNT_OFFSET) :   \
       (szHartResp[SHORT_COUNT_OFFSET] + SHORT_COUNT_OFFSET);
-  for(i=0; i< nTotal; ++i)
+  for(i=0; i<= nTotal; ++i)	// nTotal+1 iterations because need to include nData byte itself
   {
     calcLrc ^= szHartResp[i];              // Calculate the LRC
     putcUart(szHartResp[i], &hartUart);    // Transmit the character

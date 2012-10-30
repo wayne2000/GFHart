@@ -132,7 +132,6 @@ tEvent waitForEvent()
 
 /////////////////////////////////
 
-#define BUFSIZE 50
 void main()
 {
   volatile unsigned int i;
@@ -144,18 +143,10 @@ void main()
   hartUart.bRtsControl = TRUE;
   hartUart.hTxInter.enable();
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
-  volatile BYTE ch= 'A', RxBuf[BUFSIZE], rP=0,LoadSize=1, echo=0;
-  for (i=0; i<BUFSIZE ; ++i)
-    RxBuf[i]= 0;
+  volatile BYTE ch= 'A', rP=0,LoadSize=1, echo=0;
   i=0;
-
   CLEARB(TP_PORTOUT, TP1_MASK);     // Indicate we are running
-  // hartReceiverSm(INIT);
   tEvent systemEvent;
-
-  volatile BYTE a = bigTable[10]; // just test EV version
-
-
   initHartRxSm();                   // Init Global part, static are intialized at first call
   while(1)													// continuous loop
   {
@@ -206,14 +197,9 @@ void main()
   	  stopReplyTimerEvent();        // One Reply per command
   	  break;
 
-  	case evHartTxChar:              // Keep calling Transmitter until complete
-  	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
-  	  //if(!isTxEmpty(&hartUart))    // need to debug the whole transmission
-  	  //hartTransmitterSm();
-  	  break;
-
-
-
+  	case evHartTxChar:              // Transmission is transparent to user app
+  	  _no_operation();
+  		break;
 
   	case evTimerTick:               // System timer event
   		SistemTick125mS =0;						// every 2 secs we get here

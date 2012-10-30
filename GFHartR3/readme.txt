@@ -1,5 +1,12 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+// 10/29/12
+Corrected SendFrame Error
+
 //	10/23/12
+DEBUG - Most of the time can't reply to cmd0
+- Increase RX buffer to 8-> 16  == no help
+- Reply and Gap timers doubled  == they are responding but make it longer no help 
+
 Added hartcommandr3.x, common_h_cmd.*
 TEMP increase stack from 240 to 300
 -- Still not working as I need to anlize how hartTransmitter() is initialized

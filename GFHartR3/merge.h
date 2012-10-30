@@ -44,7 +44,6 @@ extern unsigned char currentMsgSent;
 extern unsigned int flashWriteCount;
 extern long dataTimeStamp;
 extern int8u updateDelay;
-extern const BYTE bigTable[100];
 
 //==============================================================================
 //

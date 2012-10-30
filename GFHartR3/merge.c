@@ -31,13 +31,6 @@ int hostActive = FALSE;
 unsigned char currentMsgSent = NO_CURRENT_MESSAGE_SENT;
 unsigned int flashWriteCount=0;
 long dataTimeStamp = 0;       //!< Data Time Stamp
-const BYTE bigTable[100] =
-    {
-        0,1,2,3,4,5,6,7,8,9,
-        10,11,12,13,14,15,16,17,18,19,
-        20,21,22,23,24,25,26,27,28,29
-
-    };
 // Defined in Main9900.c
 // Trim command flags
 unsigned char setToMinValue = FALSE;
