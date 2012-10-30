@@ -2,7 +2,9 @@
 # Automatically-generated file. Do not edit!
 ################################################################################
 
-CG_TOOL_ROOT := /opt/ti/ccsv5/tools/compiler/msp430_4.1.2
+SHELL = cmd.exe
+
+CG_TOOL_ROOT := C:/ti/ccsv5/tools/compiler/msp430_4.1.1
 
 ORDERED_OBJS += \
 $(GEN_CMDS__FLAG) \
@@ -21,8 +23,8 @@ $(GEN_CMDS__FLAG) \
 
 -include ../makefile.init
 
-RM := rm -rf
-RMDIR := rm -rf
+RM := DEL /F
+RMDIR := RMDIR /S/Q
 
 # All of the sources participating in the build are defined here
 -include sources.mk
@@ -122,7 +124,7 @@ all: GFHartR3.out
 GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: MSP430 Linker'
-	"/opt/ti/ccsv5/tools/compiler/msp430_4.1.2/bin/cl430" -vmsp --abi=eabi --code_model=small --data_model=small -Ooff --opt_for_speed=0 -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=340 -m"/home/marco/git/GFHart/GFHartR3/Debug/GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"/opt/ti/ccsv5/ccs_base/msp430/include" -i"/opt/ti/ccsv5/tools/compiler/msp430_4.1.2/lib" -i"/opt/ti/ccsv5/tools/compiler/msp430_4.1.2/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
+	"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/bin/cl430" -vmsp --abi=eabi --code_model=small --data_model=small -Ooff --opt_for_speed=0 -g --define=__MSP430F5528__ --diag_warning=225 --display_error_number --diag_wrap=off --silicon_errata=CPU21 --silicon_errata=CPU22 --silicon_errata=CPU23 --silicon_errata=CPU40 --printf_support=minimal -z --stack_size=340 -m"C:/Users/Marco.Ginn/git/GFHart/GFHartR3/Debug/GFHartR3.map" --heap_size=160 --use_hw_mpy=F5 -i"C:/ti/ccsv5/ccs_base/msp430/include" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/lib" -i"C:/ti/ccsv5/tools/compiler/msp430_4.1.1/include" --reread_libs --warn_sections --display_error_number --diag_wrap=off --rom_model -o "GFHartR3.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 

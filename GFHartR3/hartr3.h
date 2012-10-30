@@ -408,7 +408,7 @@ void setSecondaryStatusBits(unsigned char);
 void clrPrimaryStatusBits(unsigned char);
 void clrSecondaryStatusBits(unsigned char);
 void syncNvRam(void);
-int isAddressValid(void);
+
 
 // The programmed Device ID must be set in a different area of FLASH
 // and copied into the local data on initialization

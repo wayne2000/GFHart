@@ -71,7 +71,7 @@ unsigned char badTagFlag = FALSE;
 // Return Type: void
 //
 // Implementation notes:
-//
+//  MH- Added Byte order from HCF_SPEC-127  Rev 7.1
 // 
 //
 /////////////////////////////////////////////////////////////////////////////////////////// 
@@ -88,50 +88,50 @@ void common_cmd_0(void)
 		startUpDataLocalNv.Primary_status : 
 		startUpDataLocalNv.Secondary_status;  // status byte
 	++respBufferSize;							
-	// Response Code
+	// 0 - Response Code
 	szHartResp[respBufferSize] = 254;  // Response Code
 	++respBufferSize;	
-	// Expanded Device Type	
+	// 1-2 Expanded Device Type
 	copyIntToRespBuf(startUpDataLocalV.expandedDevType);
-	// Min number of preambles M -> S
+	// 3  Min number of preambles M -> S
 	szHartResp[respBufferSize] = startUpDataLocalV.minPreamblesM2S;
 	++respBufferSize;	
-	// HART revision
+	// 4  HART revision
 	szHartResp[respBufferSize] = startUpDataLocalV.majorHartRevision;
 	++respBufferSize;	
-	//Device Revision
+	// 5  Device Revision
 	szHartResp[respBufferSize] = startUpDataLocalV.deviceRev;
 	++respBufferSize;	
-	// sw revision
+	// 6  sw revision
 	szHartResp[respBufferSize] = startUpDataLocalV.swRev;
 	++respBufferSize;	
-	// hw revision & signal code combined
+	// 7  hw revision (5 msb) & signal code (3-lsb) combined
 	unsigned char temp = startUpDataLocalV.hwRev << 3;
 	temp |= (startUpDataLocalV.physSignalCode & 0x07);
 	szHartResp[respBufferSize] = temp;
 	++respBufferSize;	
-	// flags
+	// 8  flags
 	szHartResp[respBufferSize] = startUpDataLocalV.flags;
 	++respBufferSize;	
-	// Device ID
+	// 9-11 Device ID
 	memcpy(&(szHartResp[respBufferSize]), &startUpDataLocalNv.DeviceID, 3);
 	respBufferSize += 3;
-	// Min number of preambles S -> M
+	// 12 Min number of preambles S -> M
 	szHartResp[respBufferSize] = startUpDataLocalV.minPreamblesS2M;
 	++respBufferSize;	
-	// Max device vars
+	// 13 Max device vars
 	szHartResp[respBufferSize] = startUpDataLocalV.maxNumDevVars;
 	++respBufferSize;	
-	// config change counter
+	// 14-15  config change counter
 	copyIntToRespBuf(startUpDataLocalNv.configChangeCount);
-	// Extended field device status
+	// 16 Extended field device status
 	szHartResp[respBufferSize] = startUpDataLocalV.extendFieldDevStatus;  
 	++respBufferSize;							
-	// Manufacturer ID
+	// 17-18 Manufacturer ID
 	copyIntToRespBuf(startUpDataLocalNv.ManufacturerIdCode);
-	// Private Label distributor ID
+	// 19-20  Private Label distributor ID
 	copyIntToRespBuf(startUpDataLocalV.PrivDistCode);
-	// Device Profile			
+	// 21 Device Profile
 	szHartResp[respBufferSize] = startUpDataLocalV.devProfile;  
 	++respBufferSize;		
 }
@@ -745,7 +745,7 @@ void common_cmd_11(void)
 	{
 		// No response at all
 		badTagFlag = TRUE;
-		rtsRcv();
+		// rtsRcv();   // MH: Not necessary as in "Run to completion" we don't send partial messages
 		// Get ready for a new command
 		// MH substituted prepareToRxFrame();
 		initHartRxSm();
@@ -1269,7 +1269,7 @@ void common_cmd_21(void)
 	{
 		// No response at all
 		badTagFlag = TRUE;
-		rtsRcv();
+		// rtsRcv();   // MH: Not necessary as in "Run to completion" we don't send partial messages
 		// Get ready for a new command
 		//MH substituted prepareToRxFrame();
 		initHartRxSm();

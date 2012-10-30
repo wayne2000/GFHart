@@ -14,24 +14,8 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
-
-
-// Defines
-#define HART_PREAMBLE       0xFF
-#define MIN_PREAMBLE_BYTES  2
-#define MAX_PREAMBLE_BYTES  30
 #define XMIT_PREAMBLE_BYTES 8
-// SOM delimiter defines
-#define BACK 0x01
-#define STX 0x02
-#define ACK 0x06
-#define LONG_ADDR_MASK 0x80
-#define FRAME_MASK 0x07
-#define EXP_FRAME_MASK  0x60
-#define LONG_ADDR_SIZE 5
-#define SHORT_ADDR_SIZE 1
-#define LONG_COUNT_OFFSET 7
-#define SHORT_COUNT_OFFSET 3
+
 
 // 9900 response, max size 15 bytes
 #define MAX_9900_RESP_SIZE 15
@@ -49,7 +33,7 @@ void sendHartFrame (void);
 //
 void initHartRxSm(void);
 void initRespBuffer(void);
-void rtsRcv(void);
+//void rtsRcv(void);
 
 /*************************************************************************
   *   $GLOBAL VARIABLES

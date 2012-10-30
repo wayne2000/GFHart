@@ -1,4 +1,11 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+// 10/30/12
+- Analizing Hart command by functions: 0,11,21 = Idenitity
+- isAddressValid() moved to protocols.h, reduces scope of defines 
+- rtsRcv() not needed (we don't send partial messages in run to completion)
+- Later write 18,19, Reset 42
+Linker basic options -> ${ProjDirPath}/Debug/GFHartR3.map to aid in Linux/Windows context switch
+
 // 10/29/12
 Corrected SendFrame Error
 

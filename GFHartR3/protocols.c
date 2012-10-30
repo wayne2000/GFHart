@@ -27,6 +27,25 @@
 #define MAX_RCV_BYTE_COUNT 267
 #define MAX_HART_DATA_SIZE 255
 
+// Defines
+#define HART_PREAMBLE       0xFF
+#define MIN_PREAMBLE_BYTES  2
+#define MAX_PREAMBLE_BYTES  30
+
+// SOM delimiter defines
+#define BACK 0x01
+#define STX 0x02
+#define ACK 0x06
+
+#define LONG_ADDR_MASK 0x80
+#define FRAME_MASK 0x07
+#define EXP_FRAME_MASK  0x60
+#define LONG_ADDR_SIZE 5
+#define SHORT_ADDR_SIZE 1
+#define LONG_COUNT_OFFSET 7
+#define SHORT_COUNT_OFFSET 3
+
+
 
 
 
@@ -34,6 +53,7 @@
 //==============================================================================
 //  LOCAL PROTOTYPES.
 //==============================================================================
+static int isAddressValid(void);
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
@@ -511,6 +531,95 @@ int checkCarrierDetect (void)
     return rtnVal;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+//
+// Function Name: isAddressValid()
+//
+// Description:
+//
+// Verify that the address is either a broadcast address or is an exact match
+// to the poll address in the database. Returns TRUE if either conditions
+// met, FALSE otherwise
+//
+// Parameters:
+//     unsigned char * pCommand:  pointer to the HART command to check the address of.
+//
+// Return Type: unsigned int.
+//
+// Implementation notes:
+//
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////
+// HART 7 compliant
+static int isAddressValid(void)
+{
+  union
+  {
+    unsigned int i;
+    unsigned char b[2];
+  } myDevId;
+  int index;
+  // Mask the Primary bit out of the poll address
+  unsigned char pollAddress = szHartCmd[addressStartIdx] & ~(PRIMARY_MASTER | BURST_MODE_BIT);
+  // Now capture if it is from the primary or secondary master
+  startUpDataLocalV.fromPrimary = (szHartCmd[addressStartIdx] & PRIMARY_MASTER) ? TRUE : FALSE;
+  int isValid = FALSE;
+
+  // Set the broadcast flag to FALSE
+  rcvBroadcastAddr = FALSE;
+  // Remove the Burst mode bit
+  szHartCmd[addressStartIdx] &= ~BURST_MODE_BIT;
+  if (longAddressFlag)
+  {
+    // We only need to compare to the lower 14 bits
+    myDevId.i = startUpDataLocalV.expandedDevType & EXT_DEV_TYPE_ADDR_MASK;
+    // Now XOR out the recieved address for each
+    myDevId.b[1] ^= szHartCmd[addressStartIdx] & POLL_ADDR_MASK;
+    myDevId.b[0] ^= szHartCmd[addressStartIdx+1];
+    // If the ID is 0, check for a unique address
+    if (!myDevId.i)
+    {
+      // Now compare the last 3 bytes of address
+      if (!(memcmp(&szHartCmd[addressStartIdx+2], &startUpDataLocalNv.DeviceID, 3)))
+      {
+        isValid = TRUE;
+      }
+    }
+    // If the address is not a unique address for me,
+    // look for the broadcast address
+    if (!isValid)
+    {
+      // Check to see if it is a broadcast. We have to check the first byte
+      // separately, since it may have the primary master bit set.
+      // Mask out the primary master bit of the first byte
+      if (0 != (szHartCmd[addressStartIdx] & ~PRIMARY_MASTER))
+      {
+        return isValid;
+      }
+      // Now check the following 4 bytes
+      for (index = 1; index < LONG_ADDR_SIZE; ++index)
+      {
+        // the rest of the bytes are 0 if this is a broadcast address
+        if(0 != szHartCmd[addressStartIdx+index])
+        {
+          return isValid;
+        }
+      }
+      rcvBroadcastAddr = TRUE;
+      isValid = TRUE;
+    }
+  }
+  else  // short Polling address for Cmd0?
+  {
+    if (startUpDataLocalNv.PollingAddress == pollAddress)
+    {
+      isValid = TRUE;
+    }
+  }
+  return isValid;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -548,6 +657,7 @@ void initRespBuffer(void)
   // set frame offset for building the command to the next position
   respBufferSize = i + 1;
 }
+#if 0
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
 // Function Name: rtsRcv()
@@ -569,6 +679,7 @@ void initRespBuffer(void)
 {
     P4OUT |= BIT0;
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
