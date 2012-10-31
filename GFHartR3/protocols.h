@@ -29,7 +29,7 @@
 *************************************************************************/
 // HART Frame Handlers
 void hartReceiver(WORD data);
-void sendHartFrame (void);
+WORD sendHartFrame (void);
 //
 void initHartRxSm(void);
 void initRespBuffer(void);

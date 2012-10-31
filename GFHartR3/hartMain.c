@@ -108,7 +108,8 @@ tEvent waitForEvent()
   		//!isEnabledHartTxDriver() &&  // Its is better to test RTS line: isTxEmpty && RTS disable
   		SistemTick125mS < 16 &&
   		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&
-  		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0
+  		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&
+  		IS_SYSTEM_EVENT(evHartTransactionDone) ==0
   		)//  && all conditions that indicates no-event)
   {
   	//stop_oscillator();
@@ -135,6 +136,7 @@ tEvent waitForEvent()
 void main()
 {
   volatile unsigned int i;
+  WORD flashWriteTimer=0, nBytesSent=0;
   low_power =1;
 
   initSystem();
@@ -182,9 +184,8 @@ void main()
   	    {
   	      // If cmdReset is true && cmd reset response is false, then execute this
   	      // ship the HART response
-  	      sendHartFrame();
+  	      nBytesSent = sendHartFrame();
   	      // hartTransmitterSm(TRUE);
-
   	    }
   	    else
   	      // This command was not for this address or invalid
@@ -196,6 +197,22 @@ void main()
   	  }
   	  stopReplyTimerEvent();        // One Reply per command
   	  break;
+  	case evHartTransactionDone:
+  	  //  Estimate the "response time" from previous transaction
+
+  	  if(flashWriteTimer >= 2)   // every 4 secs
+  	  {
+  	    flashWriteTimer =0;
+  	    if(updateNvRam)         //  No longer need to test "hostActive",
+  	    {
+  	      SETB(TP_PORTOUT,TP3_MASK);
+  	      updateNvRam = FALSE;
+  	      ++flashWriteCount;
+  	      syncNvRam();
+  	      CLEARB(TP_PORTOUT,TP3_MASK);
+  	    }
+  	  }
+  	  break;
 
   	case evHartTxChar:              // Transmission is transparent to user app
   	  _no_operation();
@@ -205,6 +222,7 @@ void main()
   		SistemTick125mS =0;						// every 2 secs we get here
   		// Increment the data time stamp and roll it every 24 hours
   		++dataTimeStamp;
+  		++flashWriteTimer;
   		break;
 
   	case evNull:

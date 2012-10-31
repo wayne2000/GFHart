@@ -53,7 +53,6 @@ void initHardware(void);            //!< Initialize Peripherals for the Hart App
   *   $GLOBAL VARIABLES
 *************************************************************************/
 extern volatile WORD SistemTick125mS;
-extern volatile WORD flashWriteTimer;
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/

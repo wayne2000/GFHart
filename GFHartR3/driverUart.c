@@ -233,6 +233,7 @@ __interrupt void hartSerialIsr(void)
         hartUart.hLoopBack.disable();           // Disable loop back
         hartUart.hTxDriver.disable();           // Disable the Tx Driver
         hartUart.bTxMode = FALSE;               // Tx is done
+        SET_SYSTEM_EVENT(evHartTransactionDone);  // Signal the end of command-reply transaction
       }
     }
     else

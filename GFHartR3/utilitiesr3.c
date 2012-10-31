@@ -392,7 +392,7 @@ int syncToFlash(unsigned char * flashPtr, unsigned char * memPtr, int memSize)
 	// Verify that it worked (or not)
 	success = verifyFlashContents(flashPtr, memPtr, memSize);
 	// Reset the write timer to 0 so it starts counting up
-	flashWriteTimer = 0;
+	//flashWriteTimer = 0;
 	return success;
 }
 

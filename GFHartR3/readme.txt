@@ -1,4 +1,8 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+// 10/31/12
+Working in saving NV data to flash
+== Need to estimate last transaction time -if less than XX then save to flash
+  
 // 10/30/12
 - Analizing Hart command by functions: 0,11,21 = Idenitity
 - isAddressValid() moved to protocols.h, reduces scope of defines 

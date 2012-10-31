@@ -22,6 +22,8 @@ typedef enum
 	evHartTxChar,             //!< Hart transmiter has moved a char to shift register for transmission
 	evHartRcvGapTimeout,			//!< Inter-character time exceded
   evHartRcvReplyTimer,			//<! Just a silent time between master command and a slave reply
+  evHartTransactionDone,    //<! The Hart modem is set to LISTEN mode after the reply is complete, we still have
+                            //   around ~78mS silent line before the bits from following Hart frame arrive
 
   // System
   evTimerTick,							//!< general purpose System Time tick

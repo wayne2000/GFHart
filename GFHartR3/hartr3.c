@@ -463,7 +463,9 @@ void UpdateSensorType(void)
 void copyNvDeviceIdToRam(void)
 {
 	// Define the erased FLASH pattern
-	unsigned char erasedValue[DEVICE_ID_SIZE] = {0xFF, 0xFF, 0xFF};
+	//unsigned char erasedValue[DEVICE_ID_SIZE] = {0xFF, 0xFF, 0xFF}; //MH Initialization is wrong
+  unsigned char erasedValue[DEVICE_ID_SIZE];
+  memset(erasedValue,0xFF,DEVICE_ID_SIZE);    //MH erasedValue[0..DEVICE_ID_SIZE-1]= 0xFF
 	// Only copy if the FLASH is NOT erased
 	if (memcmp(pNvDevId, erasedValue, DEVICE_ID_SIZE))
 	{
@@ -529,7 +531,9 @@ void verifyDeviceId(void)
 	int numSegsToErase;
 	// Make sure the FLASH device ID is programmed before proceeding
 	// Define the erased FLASH pattern
-	unsigned char erasedValue[DEVICE_ID_SIZE] = {0xFF, 0xFF, 0xFF};
+	//unsigned char erasedValue[DEVICE_ID_SIZE] = {0xFF, 0xFF, 0xFF}; //MH Initialization is wrong
+	unsigned char erasedValue[DEVICE_ID_SIZE];
+	memset(erasedValue,0xFF,DEVICE_ID_SIZE);      //MH erasedValue[0..DEVICE_ID_SIZE-1]= 0xFF
 	// Only continue if the FLASH is NOT erased
 	if (memcmp(pNvDevId, erasedValue, DEVICE_ID_SIZE))
 	{

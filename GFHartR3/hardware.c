@@ -26,7 +26,7 @@ static void toggleRtsLine();
 //  GLOBAL DATA
 //==============================================================================
 volatile WORD SistemTick125mS=0;
-volatile WORD flashWriteTimer =0;   // Original timer was 4000 mS
+//  volatile WORD flashWriteTimer =0;   // Original timer was 4000 mS, local var
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
@@ -331,7 +331,6 @@ __interrupt void TIMERB1_ISR(void)
   ++SistemTick125mS;
   SET_SYSTEM_EVENT(evTimerTick);
   //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
-  ++flashWriteTimer;  //MH  Cloning function from original project
 }
 
 /*!

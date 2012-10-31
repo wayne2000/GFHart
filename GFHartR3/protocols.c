@@ -691,14 +691,14 @@ void initRespBuffer(void)
 //
 // Parameters: void
 //
-// Return Type: void.
+// Return Type:  Number of bytes sent to output stream
 //
 // Implementation notes:
 //  pRespBuffer
 //
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
-void sendHartFrame (void)
+WORD sendHartFrame (void)
 {
 
   WORD i;
@@ -735,6 +735,8 @@ void sendHartFrame (void)
   // Get ready for next frame
   // 10) prepareToRxFrame();
   initHartRxSm();
-  }
+  return nTotal +2; //  Frane total size
+}
+
 
 
