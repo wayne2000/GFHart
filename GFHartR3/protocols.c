@@ -735,7 +735,7 @@ WORD sendHartFrame (void)
   // Get ready for next frame
   // 10) prepareToRxFrame();
   initHartRxSm();
-  return nTotal +2; //  Frane total size
+  return nTotal +2 + XMIT_PREAMBLE_BYTES; //  Frame total size = Frame + 1 + LRC + Preambles
 }
 
 

@@ -1,4 +1,10 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+//	11/1/12
+Tested Hart messages that request saving data to Flash:
+	Flash write 40mS, Transaction rate 500 , command_2 = 44*11/1200 +14 = 417. SIlent window = 80mS, margin 50%
+	
+Commands that generate a write request: 6 Save Polling Address, 17 Write MSG, 18 Write tag, descriptor & date,
+19 Write final assembly number, 22 Write Long Tag, 219 Write device ID 
 // 10/31/12
 Working in saving NV data to flash
 == Need to estimate last transaction time -if less than XX then save to flash

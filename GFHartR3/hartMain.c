@@ -106,7 +106,7 @@ tEvent waitForEvent()
   while(
   		isRxEmpty(&hartUart) &&
   		//!isEnabledHartTxDriver() &&  // Its is better to test RTS line: isTxEmpty && RTS disable
-  		SistemTick125mS < 16 &&
+  		SistemTick125mS < 8 &&
   		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&
   		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&
   		IS_SYSTEM_EVENT(evHartTransactionDone) ==0
@@ -136,7 +136,9 @@ tEvent waitForEvent()
 void main()
 {
   volatile unsigned int i;
-  WORD flashWriteTimer=0, nBytesSent=0;
+  WORD flashWriteTimer=0,
+        Cmds[10],nTotalBytes[10];  // Small debug: list previous Commands and transactions
+  WORD  nBytesHartTransaction, nBytesHartRx;  // Not initialized, but allow a few loop scans
   low_power =1;
 
   initSystem();
@@ -157,6 +159,7 @@ void main()
   	{
   	case evHartRxChar:
   	  SETB(TP_PORTOUT, TP1_MASK);
+  	  ++nBytesHartRx;       // Count every received char at Hart (loop back doesn't generate and event)
   	  // Just test we are receiving a 475 Frame
   		hartReceiver(getwUart(&hartUart));
 
@@ -183,8 +186,17 @@ void main()
   	    if (processHartCommand() && !doNotRespond)
   	    {
   	      // If cmdReset is true && cmd reset response is false, then execute this
-  	      // ship the HART response
-  	      nBytesSent = sendHartFrame();
+  	      for(i=0;i<9; ++i)
+  	      {
+  	        Cmds[i]= Cmds[i+1];
+  	        nTotalBytes[i] = nTotalBytes[i+1];
+  	      }
+  	      Cmds[i] = hartCommand;
+  	      nBytesHartTransaction = sendHartFrame() + nBytesHartRx;
+  	      _no_operation();    // Debug number of Rx
+  	      nBytesHartRx =0;  // Reset counter for the next transaciton
+  	      nTotalBytes[i] = nBytesHartTransaction;
+
   	      // hartTransmitterSm(TRUE);
   	    }
   	    else
@@ -198,12 +210,12 @@ void main()
   	  stopReplyTimerEvent();        // One Reply per command
   	  break;
   	case evHartTransactionDone:
-  	  //  Estimate the "response time" from previous transaction
-
-  	  if(flashWriteTimer >= 2)   // every 4 secs
+  	  //  After the Hart transaction ends we have a silent line time, can last 80mS (Cmd 1,2)
+  	  //  ***** Write To Flash *****
+  	  if(flashWriteTimer >= 4)   // every 4 secs
   	  {
   	    flashWriteTimer =0;
-  	    if(updateNvRam)         //  No longer need to test "hostActive",
+  	    if(updateNvRam && nBytesHartTransaction <=50  )
   	    {
   	      SETB(TP_PORTOUT,TP3_MASK);
   	      updateNvRam = FALSE;
@@ -218,8 +230,8 @@ void main()
   	  _no_operation();
   		break;
 
-  	case evTimerTick:               // System timer event
-  		SistemTick125mS =0;						// every 2 secs we get here
+  	case evTimerTick:               // System timer event - Get here every 8 x125mS = 1 Sec
+  		SistemTick125mS =0;
   		// Increment the data time stamp and roll it every 24 hours
   		++dataTimeStamp;
   		++flashWriteTimer;
