@@ -319,6 +319,16 @@ static void toggleRtsLine()
       resetWatchdog();
   }
 }
+/*!
+ * \function  stop_oscillator()
+ * Stops the CPU clock and puts the processor in sleep mode. Sleep mode can only be exited by interrupt
+ * that restarts the clock.
+ *
+ */
+void stop_oscillator()
+{
+  _low_power_mode_0(); //  _low_power_mode_3();
+}
 
 /*!
  * Timer B0 interrupt service routine
@@ -331,6 +341,7 @@ __interrupt void TIMERB1_ISR(void)
   ++SistemTick125mS;
   SET_SYSTEM_EVENT(evTimerTick);
   //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
+  _low_power_mode_off_on_exit();
 }
 
 /*!
@@ -343,6 +354,7 @@ __interrupt void gapTimerISR(void)
 {
 	SET_SYSTEM_EVENT(evHartRcvGapTimeout);
 	//while(1);	// Trap
+	_low_power_mode_off_on_exit();
 }
 /*!
  * Timer A1	interrupt service routine for CC1-CC2 and TAIFG
@@ -353,6 +365,7 @@ __interrupt void gapTimerISR(void)
 __interrupt void slaveReplyTimerISR(void)
 {
 	SET_SYSTEM_EVENT(evHartRcvReplyTimer);
+	_low_power_mode_off_on_exit();
 	//while(1);	// Trap
 }
 

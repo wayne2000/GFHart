@@ -145,17 +145,35 @@ BOOLEAN initUart(stUart *pUart)
 
 /*!
  * \function    initHartUart()
- * Initializes the Hart Uart to 1200, 8,o,1 using SMCLK @1.048576 MHz
+ * Initializes the Hart Uart to 1200, 8,o,1 using
+ *  - SMCLK @1.048576 MHz or
+ *  -ACLK @32.768KHz
  *
  */
 static void initHartUart(void)
 {
   UCA1CTL1 =    UCSWRST;            // Reset internal SM
-  UCA1CTL1 |=   UCSSEL_2;           // SMCLK as source
+#ifdef  HART_UART_USES_SMCLK
+  #ifdef HART_UART_USES_ACLK
+    #error Define only one clk source
+  #endif
+    UCA1CTL1 |=   UCSSEL_2;           // SMCLK as source
+    UCA1BR0 = 0x6A;                   // BR= 1048576/1200 = 873.8133 ~ 874
+    UCA1BR1 = 0x03;
+    UCA1MCTL =0;                      // No modulation
+#else
+  #ifdef HART_UART_USES_ACLK
+    UCA1CTL1 |=   UCSSEL_1;           // ACLK as source ==> This will be the preferred if LPM3
+    UCA1BR0 = 0x1B;                   // BR= 32768/1200 = 27.306 = 0x1B + 2/8
+    UCA1BR1 = 0x00;
+    UCA1MCTL = UCBRS_2;               // Second modulation stage = 2  (.306 * 8 ~aprox 2)
+  #else
+    #error Define either HART_UART_USES_ACLK or HART_UART_USES_SMCLK for Hart UART
+  #endif
 
-  UCA1BR0 = 0x6A;                   // BR= 1048576/1200 = 873.8133 ~ 874
-  UCA1BR1 = 0x03;
-  UCA1MCTL =0;                      // No modulation
+#endif
+
+
 
 
   //  case PARITY_ODD:
@@ -273,6 +291,7 @@ __interrupt void hartSerialIsr(void)
 
     break;
   }
+  _low_power_mode_off_on_exit();
 }
 
 #pragma vector=USCI_A0_VECTOR

@@ -112,8 +112,7 @@ tEvent waitForEvent()
   		IS_SYSTEM_EVENT(evHartTransactionDone) ==0
   		)//  && all conditions that indicates no-event)
   {
-  	//stop_oscillator();
-  	_no_operation();
+    stop_oscillator();
   }
   //	There is an event, need to find from registered ones
   tEvent event = evNull;

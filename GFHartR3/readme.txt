@@ -1,5 +1,6 @@
 //	GF Hart Communication Module - code Rev 3. renew 
 //	11/1/12
+Start Testing in LPM0
 Tested Hart messages that request saving data to Flash:
 	Flash write 40mS, Transaction rate 500 , command_2 = 44*11/1200 +14 = 417. SIlent window = 80mS, margin 50%
 	

@@ -48,6 +48,7 @@ void INIT_set_Vcore(unsigned char);
 void INIT_SVS_supervisor(void);
 
 void initHardware(void);            //!< Initialize Peripherals for the Hart Application
+void stop_oscillator();             //!< Stops the CPU clock and go to sleep mode
 
 /*************************************************************************
   *   $GLOBAL VARIABLES

@@ -16,6 +16,12 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
+//  Select ONE of the available clock sources for Hart UART
+//  This will allow LPM0 (SMCLK) or PM3 (ACLK, if possible) for Low Power Mode
+//#define HART_UART_USES_ACLK
+#define HART_UART_USES_SMCLK
+
+
 ///
 /// the following are counters used for debugging serial communications */
 ///
