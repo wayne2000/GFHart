@@ -104,15 +104,24 @@ tEvent waitForEvent()
 {
   // Wait until something happens
   while(
-  		isRxEmpty(&hartUart) &&
   		//!isEnabledHartTxDriver() &&  // Its is better to test RTS line: isTxEmpty && RTS disable
-  		SistemTick125mS < 8 &&
-  		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&
-  		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&
-  		IS_SYSTEM_EVENT(evHartTransactionDone) ==0
+  		isRxEmpty(&hartUart) &&													// 	Every received Hart character
+  		SistemTick125mS < 8 &&													// 	Main loop scanned every 1 sec
+  		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&			//	Current Hart rx message is broken
+  		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&			//	Hart message needs a Reply
+  		IS_SYSTEM_EVENT(evHartTransactionDone) ==0			//	Hart Command-reply ends and RTS is set to RX mode
   		)//  && all conditions that indicates no-event)
   {
-    stop_oscillator();
+    /*!
+  	 * stop_oscillator()
+  	 * Stops the CPU clock and puts the processor in sleep mode.
+  	 * Sleep mode can only be exited by interrupt that restarts the clock.
+  	 *
+  	 */
+  	//_low_power_mode_0();
+  	//_low_power_mode_1();
+  	//_low_power_mode_3();
+  	_no_operation();
   }
   //	There is an event, need to find from registered ones
   tEvent event = evNull;

@@ -1,7 +1,7 @@
 //	GF Hart Communication Module - code Rev 3. renew 
-//	11/1/12
-Start Testing in LPM0
-Tested Hart messages that request saving data to Flash:
+//	11/1/12 - 11/4/12
+We will test LPM0 later - Move to HSB as schedule needs full functionallity first  
+-Tested Hart messages that request saving data to Flash:
 	Flash write 40mS, Transaction rate 500 , command_2 = 44*11/1200 +14 = 417. SIlent window = 80mS, margin 50%
 	
 Commands that generate a write request: 6 Save Polling Address, 17 Write MSG, 18 Write tag, descriptor & date,

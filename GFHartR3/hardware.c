@@ -319,16 +319,6 @@ static void toggleRtsLine()
       resetWatchdog();
   }
 }
-/*!
- * \function  stop_oscillator()
- * Stops the CPU clock and puts the processor in sleep mode. Sleep mode can only be exited by interrupt
- * that restarts the clock.
- *
- */
-void stop_oscillator()
-{
-  _low_power_mode_0(); //  _low_power_mode_3();
-}
 
 /*!
  * Timer B0 interrupt service routine
