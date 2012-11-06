@@ -21,24 +21,22 @@
 
 //#define HART_ICTL   UCA1ICTL
 // A0 is the HSB UART
-#define MAIN_CTL0   UCA0CTL0
-#define MAIN_CTL1   UCA0CTL1
-#define MAIN_BR0    UCA0BR0
-#define MAIN_BR1    UCA0BR1
-#define MAIN_MCTL   UCA0MCTL
-#define MAIN_IV     UCA0IV
-#define MAIN_IE     UCA0IE
-#define MAIN_IFG    UCA0IFG
-#define MAIN_RXBUF  UCA0RXBUF
-#define MAIN_TXBUF  UCA0TXBUF
-#define MAIN_STAT   UCA0STAT
-#define MAIN_CTLW0  UCA0CTLW0
-#define MAIN_BRW    UCA0BRW
-#define MAIN_ABCTL  UCA0ABCTL
-#define MAIN_IRCTL  UCA0IRCTL
-#define MAIN_IRTCTL UCA0IRTCTL
-#define MAIN_IRRCTL UCA0IRRCTL
-#define MAIN_ICTL   UCA0ICTL
+//#define MAIN_CTL1   UCA0CTL1
+//#define MAIN_BR0    UCA0BR0
+//#define MAIN_BR1    UCA0BR1
+//#define MAIN_MCTL   UCA0MCTL
+//#define MAIN_IV     UCA0IV
+//#define MAIN_IE     UCA0IE
+//#define MAIN_IFG    UCA0IFG
+//#define MAIN_STAT   UCA0STAT
+//#define MAIN_CTLW0  UCA0CTLW0
+
+//#define MAIN_BRW    UCA0BRW
+//#define MAIN_ABCTL  UCA0ABCTL
+//#define MAIN_IRCTL  UCA0IRCTL
+//#define MAIN_IRTCTL UCA0IRTCTL
+//#define MAIN_IRRCTL UCA0IRRCTL
+//#define MAIN_ICTL   UCA0ICTL
 
 /////////////  Hardware Pins    ////////////////
 //  Test Points

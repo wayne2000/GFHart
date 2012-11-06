@@ -53,6 +53,7 @@ typedef struct
   const WORD nRxBufSize, nTxBufSize;    //!< Internal buffer sizes
   void (*initUcsi)(void);               //!< Function to initialize msp Uart
   int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
+  const	BOOLEAN bRtsControl;           	//!< TRUE if Tx Requires hardware control \SA Tx handler functions
 
   const stFuncCtrl
               hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers           //TODO: interrupt Enable/Disable is not used
@@ -68,7 +69,7 @@ typedef struct
   volatile BOOLEAN
               bRxError,                 //!< A global error in Rx = cancel current Frame
               bNewRxChar,               //!< New Char has arrived
-              bRtsControl,           		//!< Tx Requires hardware control \SA Tx handler functions
+
               bUsciTxBufEmpty,          //!< Status of msp430 Serial buffer (write direct to txsbuf)
               bTxMode,                  //!< When Half Duplex, ignore Rx characters but last one
               bRxFifoOverrun,           //!< Fifo overrun indicator
@@ -78,7 +79,6 @@ typedef struct
 /*************************************************************************
   *   $GLOBAL PROTOTYPES
 *************************************************************************/
-BOOLEAN initUarts();                        //!< Initialize Hart 1200,odd,8,1 and Hsb uart 19,200,odd,7,1 test memory
 BOOLEAN putcUart(BYTE ch, stUart *pUart);   //!<  Put a BYTE into output stream
 //
 //	Two Implementations for getting data from output stream, use the one
@@ -228,31 +228,114 @@ inline void hartTxChar(BYTE ch)
 {
   UCA1TXBUF = ch;
 }
-//////// TxDriver
+//////// Tx/Rx Loopback
 /*!
- *  \function disableHartTxDriver()
- *  Put the hart modem in listen mode
+ *  \function disableHartLoopBack()
+ *  Remove internal connection between RX and TX line
  */
 inline void disableHartLoopBack(void)
 {
   UCA1STAT &= ~UCLISTEN;
 }
 /*!
- *  \function enableHartTxDriver()
- *  Put the hart modem in talk mode
+ *  \function enableHartLoopBack()
+ *  Connect internally RX and TX line
  */
 inline void enableHartLoopBack(void)
 {
   UCA1STAT |= UCLISTEN;
 }
 /*
- * \function isHartTxIntrEnabled
- * Enable Hart transmit serial interrupt -
+ * \function isEnabledHartLoopBack
+ * Get the status of internal TX and RX loopback
  */
 inline BOOLEAN isEnabledHartLoopBack(void)
 {
   return (UCA1STAT & UCLISTEN) ? TRUE : FALSE;
 }
+///===
+/////////// HSB- High Speed Bus Rx, Tx //////////////
+/*
+ * \function disableHsbRxInter
+ * Disable Hsb serial transmit interrupt -
+ */
+inline void disableHsbRxIntr(void)
+{
+  UCA0IE &= ~UCRXIE;
+}
+/*
+ * \function enableHsbRxInter
+ * Enable Hsb transmit serial interrupt -
+ */
+inline void enableHsbRxIntr(void)
+{
+  UCA0IE |= UCRXIE;
+}
+/*
+ * \function isHsbRxIntrEnabled
+ * Enable Hsb transmit serial interrupt -
+ */
+inline BOOLEAN isHsbRxIntrEnabled(void)
+{
+  return (UCA0IE & UCRXIE) ? TRUE : FALSE;
+}
 
+/*
+ * \function disableHsbTxInter
+ * Disable Hsb serial transmit interrupt -
+ */
+inline void disableHsbTxIntr(void)
+{
+  UCA0IE &= ~UCTXIE;
+}
+/*
+ * \function enableHsbTxInter
+ * Enable Hsb transmit serial interrupt -
+ */
+inline void enableHsbTxIntr(void)
+{
+  UCA0IE |= UCTXIE;
+}
+/*
+ * \function isHsbTxIntrEnabled
+ * Enable Hsb transmit serial interrupt -
+ */
+inline BOOLEAN isHsbTxIntrEnabled(void)
+{
+  return (UCA0IE & UCTXIE) ? TRUE : FALSE;
+}
+//////// Tx/Rx Loopback
+/*!
+ *  \function disableHsbLoopBack()
+ *  Remove internal connection between RX and TX line
+ */
+inline void disableHsbLoopBack(void)
+{
+  UCA0STAT &= ~UCLISTEN;
+}
+/*!
+ *  \function enableHsbLoopBack()
+ *  Connect internally RX and TX line
+ */
+inline void enableHsbLoopBack(void)
+{
+  UCA0STAT |= UCLISTEN;
+}
+/*
+ * \function isEnabledHsbLoopBack
+ * Get the status of internal TX and RX loopback
+ */
+inline BOOLEAN isEnabledHsbLoopBack(void)
+{
+  return (UCA0STAT & UCLISTEN) ? TRUE : FALSE;
+}
+/*
+ * \function hsbTxChar
+ * Just an abstraction of the TXSBUF
+ */
+inline void hsbTxChar(BYTE ch)
+{
+  UCA0TXBUF = ch;
+}
 
 #endif /* DRIVERHUART_H_ */

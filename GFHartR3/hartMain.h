@@ -25,6 +25,11 @@ typedef enum
   evHartTransactionDone,    //<! The Hart modem is set to LISTEN mode after the reply is complete, we still have
                             //   around ~78mS silent line before the bits from following Hart frame arrive
 
+  evHsbRxChar,							//!< Hsb receiver has a new byte in input stream
+  evHsbTxChar,							//!< Hsb transmitter has a new byte position available in output stream
+  evHsbRcvReplyTimer,
+  evHsbTransactionDone,
+
   // System
   evTimerTick,							//!< general purpose System Time tick
 

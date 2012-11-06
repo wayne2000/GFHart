@@ -67,13 +67,17 @@ volatile int16u  low_power=0;
 void initSystem(void)
 {
   initHardware();       //!<  Initialize clock system, GPIO, timers and peripherals
-  initUart(&hartUart);
+  initUart(&hartUart);	//!< Initialize Hart Uart @1200bps, 8,o,1
   // last setup of peripheral interrupts
   disableHartTxIntr();
   enableHartRxIntr();
-  initHartRxSm();       // Init Global part, static are intialized at first call
+  initHartRxSm();       // Init Global part, static vars are initialized at first call
 
-
+  //	High Speed Bus initialization
+  initUart(&hsbUart);		//!< Initialize High Speed Bus Uart @19200bps, 7,o,1
+  //(hsbUart.hRxInter.enable)();		//!<	Enable Hsb Rx interrupt
+  hsbUart.hRxInter.enable();
+  hsbUart.hTxInter.disable();		//!<	Disable Hsb Tx interrupt
 
   // Merging original code = higher level inits
   // copy in the 9900 database
@@ -109,7 +113,8 @@ tEvent waitForEvent()
   		SistemTick125mS < 8 &&													// 	Main loop scanned every 1 sec
   		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&			//	Current Hart rx message is broken
   		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&			//	Hart message needs a Reply
-  		IS_SYSTEM_EVENT(evHartTransactionDone) ==0			//	Hart Command-reply ends and RTS is set to RX mode
+  		IS_SYSTEM_EVENT(evHartTransactionDone) ==0 &&		//	Hart Command-reply ends and RTS is set to RX mode
+  		isRxEmpty(&hsbUart)														// 	Characters in Hsb Input stream
   		)//  && all conditions that indicates no-event)
   {
     /*!
@@ -140,7 +145,7 @@ tEvent waitForEvent()
 
 
 /////////////////////////////////
-
+#define smallBufSize 30
 void main()
 {
   volatile unsigned int i;
@@ -152,27 +157,40 @@ void main()
   initSystem();
 
   // This a Debug test only
-  hartUart.bRtsControl = TRUE;
   hartUart.hTxInter.enable();
+  hsbUart.hTxInter.enable();
   _enable_interrupt();    //<   Enable interrupts after all hardware and peripherals set
   volatile BYTE ch= 'A', rP=0,LoadSize=1, echo=0;
   i=0;
   CLEARB(TP_PORTOUT, TP1_MASK);     // Indicate we are running
   tEvent systemEvent;
   initHartRxSm();                   // Init Global part, static are intialized at first call
+  volatile BYTE sbufs[smallBufSize], j;
+  for(j=0;j <smallBufSize; ++j)
+  	sbufs[j] =0;
+  j=0;
   while(1)													// continuous loop
   {
   	systemEvent = waitForEvent();
   	switch(systemEvent)
   	{
+  	case evHsbRxChar:
+  	  	  ch=getcUart(&hsbUart);
+  	  		if(j < smallBufSize)
+  	  			sbufs[j++] = ch;
+  	  		else
+  	  			_no_operation();
+  	  		//  	  		putcUart(ch, &hsbUart);
+  	  		_no_operation();
+  	  		break;
   	case evHartRxChar:
-  	  SETB(TP_PORTOUT, TP1_MASK);
-  	  ++nBytesHartRx;       // Count every received char at Hart (loop back doesn't generate and event)
-  	  // Just test we are receiving a 475 Frame
-  		hartReceiver(getwUart(&hartUart));
+  	  	  SETB(TP_PORTOUT, TP1_MASK);
+  	  	  ++nBytesHartRx;       // Count every received char at Hart (loop back doesn't generate and event)
+  	  	  // Just test we are receiving a 475 Frame
+  	  		hartReceiver(getwUart(&hartUart));
 
-  		CLEARB(TP_PORTOUT, TP1_MASK);
-  		break;
+  	  		CLEARB(TP_PORTOUT, TP1_MASK);
+  	  		break;
 
   	case evHartRcvGapTimeout:
   	  if(hartFrameRcvd ==FALSE)               // Cancel current Hart Command Message, prepare to Rx a new one

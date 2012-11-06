@@ -17,11 +17,12 @@
 //  LOCAL DEFINES
 //==============================================================================
 /*  Rx Buffer is just for contention when CPU is busy and avoid overrun     */
-#define HartRxFifoLen   8
+#define hartRxFifoLen   8
 /* We would like to write the whole message to buffer and go to sleep */
-#define HartTxFifoLen   80
-#define HsbRxFifoLen    64
-#define HsbTxFifoLen    32
+#define hartTxFifoLen   80
+
+#define hsbRxFifoLen    64
+#define hsbTxFifoLen    32
 
 // Parity settings
 #define PARITY_NONE 0
@@ -32,8 +33,9 @@
 //  LOCAL PROTOTYPES.
 //==============================================================================
 static void initHartUart(void);
-static void initMainUart(void);
-extern BYTE hartRxfifoBuffer[], hartTxfifoBuffer[]; // defined bellow
+static void initHsbUart(void);
+extern BYTE hartRxfifoBuffer[], hartTxfifoBuffer[],
+						hsbRxfifoBuffer[], 	hsbTxfifoBuffer[]; 		// defined bellow
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
@@ -49,9 +51,11 @@ stSerialStatus SerialStatus;            //!<    a running summary of the UART
 stUart
   hartUart =
   {
-    HartRxFifoLen, HartTxFifoLen,           // Buffer lengths (defines)
+    hartRxFifoLen, hartTxFifoLen,           // Buffer lengths (defines)
     initHartUart,                           // points to msp430 init
     hartRxfifoBuffer, hartTxfifoBuffer,     // static allocation
+    TRUE,																		//	bRtsControl = TRUE
+
     //  Rx Interrupt Handlers
         {enableHartRxIntr,disableHartRxIntr,isHartRxIntrEnabled},
     //  Tx Interrupt Handlers
@@ -64,63 +68,47 @@ stUart
     hartTxChar,
 
   },
-  hsbUart;
+  hsbUart =
+  {
+      hsbRxFifoLen, hsbTxFifoLen,           // Buffer lengths (defines)
+      initHsbUart,                          // points to msp430 init
+      hsbRxfifoBuffer, hsbTxfifoBuffer,			// static allocation
+      FALSE,																//	bRtsControl = TRUE
+      //  Rx Interrupt Handlers
+          {enableHsbRxIntr,disableHsbRxIntr,isHsbRxIntrEnabled},
+      //  Tx Interrupt Handlers
+          {enableHsbTxIntr,disableHsbTxIntr,isHsbTxIntrEnabled},
+      //  Tx Driver
+          {NULL, NULL, NULL}, 							// Hsb has no RTS or TX Driver
+      //  Feed Tx back to RX
+          {enableHsbLoopBack,disableHsbLoopBack,isEnabledHsbLoopBack}, // NULL if no function used
+      // Writes to TXBUF and clears TXIF
+          hsbTxChar
+
+    };
 
 //==============================================================================
 //  LOCAL DATA
 //==============================================================================
-BYTE hartRxfifoBuffer[HartRxFifoLen*2];   //!< Allocates static memory for Hart Receiver Buffer (data, status)
-BYTE hartTxfifoBuffer[HartTxFifoLen];     //!< Allocates static memory for Hart Transmitt Buffer
-
+BYTE hartRxfifoBuffer[hartRxFifoLen*2];   //!< Allocates static memory for Hart Receiver Buffer (data, status)
+BYTE hartTxfifoBuffer[hartTxFifoLen];     //!< Allocates static memory for Hart Transmit Buffer
+BYTE hsbRxfifoBuffer[hsbRxFifoLen];				//!< Allocates static memory for High Speed Serial Bus receiver buffer
+BYTE hsbTxfifoBuffer[hsbTxFifoLen];				//!< Allocates static memory for High Speed Serial transmit Buffer
 //==============================================================================
 // FUNCTIONS
 //==============================================================================
 
-/*!
- * \function initUarts()
- * Initialize uarts HART to 1200,odd,8,1 and HSB to 19,200,odd,7,1, rx and tx fifos
- *
- * \param none
- * \return  TRUE if Uart initialization successful
- *
- */
-
-
-///
-///
-/// Date Created: Sep 20,2012
-/// Author:  MH
-/// Description:
-///
-BOOLEAN initUarts()
-{
-
-  //    Configure the UART for Odd parity
-  //
-  //    Init Hart Fifos: check allocated memory and size
-  if( !initFifo(&hartUart.rxFifo,HartRxFifoLen) ||
-      !initFifo(&hartUart.txFifo ,HartTxFifoLen) )
-    return FALSE;                                 //  Memory Problem
-
-  resetFifo(&hartUart.rxFifo,  hartRxfifoBuffer); //  Set internal pointers
-  resetFifo(&hartUart.txFifo,  hartTxfifoBuffer);
-  initHartUart();                       //  UART: 1200,8,O,1
-
-  return TRUE;
-
-}
 
 /*!
  * \function  initUart()
- * Initialize Uart members: fifos pointers and setsize, call the Ucsi initilization
+ *
+ * Date Created: Sep 20,2012
+ * Author:  MH
+ * Description:	Initialize Uart members: fifos pointers and setsize, call the Ucsi initilization
+ *
+ *
  *
  */
-///
-///
-/// Date Created: Sep 20,2012
-/// Author:  MH
-/// Description:
-///
 BOOLEAN initUart(stUart *pUart)
 {
   // Set Fifos max length
@@ -136,8 +124,9 @@ BOOLEAN initUart(stUart *pUart)
   pUart->bRxFifoOverrun = FALSE;
   pUart->bUsciTxBufEmpty = TRUE;
   pUart->bTxDriveEnable = FALSE;
-  pUart->bRtsControl = TRUE;
-  pUart->hTxDriver.disable();
+  //	If Uart requires RTS control provide it here
+  if(	pUart->bRtsControl && pUart->hTxDriver.disable != NULL)
+  	pUart->hTxDriver.disable();
   pUart->initUcsi();              //  Configure the msp ucsi for odd parity 1200 bps
   return TRUE;
 }
@@ -174,8 +163,6 @@ static void initHartUart(void)
 #endif
 
 
-
-
   //  case PARITY_ODD:
   UCA1CTL0  |= UCPEN;               //  set parity
   UCA1CTL0  &= ~UCPAR;              // Odd
@@ -188,7 +175,7 @@ static void initHartUart(void)
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
-// Function Name: initMainUart()
+// Function Name: initHsbUart()
 //
 // Description:
 //
@@ -203,21 +190,21 @@ static void initHartUart(void)
 // Assumes SMCLK at 1 Mhz
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
-static void initMainUart(void)
+static void initHsbUart(void)
 {
     P3SEL = BIT4 | BIT3;                        // P3.4,3 = USCI_A0 TXD/RXD
-    MAIN_CTL1 = UCSWRST;                        // reset the UART
-    MAIN_CTL1 |= UCSSEL_2;                      // SMCLK source
-    MAIN_BR0 = 3;                               // 1.048 MHz 19,200
-    MAIN_BR1 = 0;                               // 1.048 MHz 19,200
-    MAIN_MCTL = UCBRF_6 | UCBRS0 | UCOS16;      // Modln UCBRS =1, UCBRF =6, over sampling
+    UCA0CTL1 = UCSWRST;                        // reset the UART
+    UCA0CTL1 |= UCSSEL_2;                      // SMCLK source
+    UCA0BR0 = 3;                               // 1.048 MHz 19,200
+    UCA0BR1 = 0;                               // 1.048 MHz 19,200
+    UCA0MCTL = UCBRF_6 | UCBRS0 | UCOS16;      // Modln UCBRS =1, UCBRF =6, over sampling
     // Set for 7-bit data
-    MAIN_CTL0 |= UC7BIT;
+    UCA0CTL0 |= UC7BIT;
     // Odd is default for HART
     // case PARITY_ODD:
-    MAIN_CTL0 |= UCPEN;               // setMainOddParity();
-    MAIN_CTL0 &= ~UCPAR;
-    MAIN_CTL1 &= ~UCSWRST;                      // **Initialize USCI state machine**
+    UCA0CTL0 |= UCPEN;               // setMainOddParity();
+    UCA0CTL0 &= ~UCPAR;
+    UCA0CTL1 &= ~UCSWRST;                      // **Initialize USCI state machine**
 }
 
 
@@ -297,7 +284,63 @@ __interrupt void hartSerialIsr(void)
 #pragma vector=USCI_A0_VECTOR
 __interrupt void hsbSerialIsr(void)
 {
-  while(1); // trap
+	_no_operation(); // recommended by TI errata -VJ (I just left Here MH)
+	//
+	volatile BYTE rxbyte;
+	volatile WORD u =UCA0IV;  // Get the Interrupt source
+	BYTE status;
+	switch(u)
+	{
+		case 0:                                   // Vector 0 - no interrupt
+	  default:                                  //  or spurious
+	    break;
+	  case 2:                                   // Vector 2 - RXIFG
+	    status = UCA0STAT;
+	    rxbyte = UCA0RXBUF;    // read & clears the RX interrupt flag and UCRXERR status flag
+	    if( hsbUart.bTxMode )                  // Loopback interrupt
+	    {
+	      if( hsbUart.bUsciTxBufEmpty)         // Ignore everything but last char
+	      {
+	        hsbUart.hLoopBack.disable();           // Disable loop back
+	        hsbUart.bTxMode = FALSE;               // Tx is done
+	        SET_SYSTEM_EVENT(evHsbTransactionDone);  // Signal the end of command-reply transaction
+	      }
+	    }
+	    else
+	    if(status & UCRXERR & UCBRK)            //  Any (FE PE OE) error or BREAK detected?
+	        hsbUart.bRxError = TRUE;           	//  ==> power save ==> discard current frame
+	    else
+	    if(!isRxFull(&hsbUart))                	//  put data in input stream if no errors
+	    {
+	    	hsbUart.bNewRxChar = putFifo(&hsbUart.rxFifo, rxbyte);  // Signal an Event to main loop
+	    	SET_SYSTEM_EVENT(evHsbRxChar);
+	    }
+
+	    else
+	      hsbUart.bRxFifoOverrun = TRUE;       // Receiver Fifo overrun!!
+
+	    break;
+
+	  case 4:                                   // Vector 4 - TXIFG
+	    SET_SYSTEM_EVENT(evHsbTxChar);         // Send an event to main loop, to send next char
+	    if(!isEmpty(&hsbUart.txFifo))
+	    {
+	      hsbUart.txChar(getFifo(&hsbUart.txFifo));
+	      hsbUart.bUsciTxBufEmpty = FALSE;    //  enable "chain" isrs
+
+	    }
+	    else
+	    {
+	      // in Half DUplex we reach this point (look oscope carefully) while moving last char
+	      //volatile BYTE i;      for(i=0; i < 100; ++i)        __no_operation();
+	      hsbUart.bUsciTxBufEmpty = TRUE;
+	      //CLEARB(TP_PORTOUT, TP1_MASK);
+	      // Prepare to disable RTS line after Rx complete in next RX isr ->
+	      //Wrong hsbUart.hLoopBack.enable();    // Enabling loopback here is 960 after the start-bit
+	    }
+	    break;
+	  }
+	  _low_power_mode_off_on_exit();
 }
 
 /*!

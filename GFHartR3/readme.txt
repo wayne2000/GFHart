@@ -1,4 +1,7 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+//	11/5/12
+Testing Hsb Port using single char in/out
+
 //	11/1/12 - 11/4/12
 We will test LPM0 later - Move to HSB as schedule needs full functionallity first  
 -Tested Hart messages that request saving data to Flash:
