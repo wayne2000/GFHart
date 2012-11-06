@@ -114,7 +114,9 @@ tEvent waitForEvent()
   		IS_SYSTEM_EVENT(evHartRcvGapTimeout) ==0 &&			//	Current Hart rx message is broken
   		IS_SYSTEM_EVENT(evHartRcvReplyTimer) ==0 &&			//	Hart message needs a Reply
   		IS_SYSTEM_EVENT(evHartTransactionDone) ==0 &&		//	Hart Command-reply ends and RTS is set to RX mode
-  		isRxEmpty(&hsbUart)														// 	Characters in Hsb Input stream
+
+  		IS_SYSTEM_EVENT(evHsbRxChar)==0                 //  An arriving character wakes up, but get from input stream all we can get
+
   		)//  && all conditions that indicates no-event)
   {
     /*!
@@ -145,7 +147,7 @@ tEvent waitForEvent()
 
 
 /////////////////////////////////
-#define smallBufSize 30
+#define smallBufSize 80
 void main()
 {
   volatile unsigned int i;
@@ -174,22 +176,28 @@ void main()
   	systemEvent = waitForEvent();
   	switch(systemEvent)
   	{
-  	case evHsbRxChar:
-  	  	  ch=getcUart(&hsbUart);
-  	  		if(j < smallBufSize)
-  	  			sbufs[j++] = ch;
-  	  		else
-  	  			_no_operation();
-  	  		//  	  		putcUart(ch, &hsbUart);
-  	  		_no_operation();
-  	  		break;
+  	case evHsbRxChar:               //  Main loop is too slow for HSB, we need to get all we can for every RX Char (may be more than one)
+  	  while(!isRxEmpty(&hsbUart))   //  We need a 50mS timer to limit the time since the first time we enter here to the end of message
+  	  {
+  	    SETB(TP_PORTOUT, TP1_MASK);
+  	    ch=getcUart(&hsbUart);
+  	    if(j < smallBufSize)
+  	      sbufs[j++] = ch;
+  	    else
+  	      _no_operation();
+  	    CLEARB(TP_PORTOUT, TP1_MASK);
+  	  }
+  	  //  	  		putcUart(ch, &hsbUart);
+  	  _no_operation();
+  	  CLEARB(TP_PORTOUT, TP1_MASK);
+  	  break;
   	case evHartRxChar:
-  	  	  SETB(TP_PORTOUT, TP1_MASK);
+  	  	  //SETB(TP_PORTOUT, TP1_MASK);
   	  	  ++nBytesHartRx;       // Count every received char at Hart (loop back doesn't generate and event)
   	  	  // Just test we are receiving a 475 Frame
   	  		hartReceiver(getwUart(&hartUart));
 
-  	  		CLEARB(TP_PORTOUT, TP1_MASK);
+  	  		//CLEARB(TP_PORTOUT, TP1_MASK);
   	  		break;
 
   	case evHartRcvGapTimeout:
@@ -200,7 +208,7 @@ void main()
   	  break;
 
   	case evHartRcvReplyTimer:
-  	  TOGGLEB(TP_PORTOUT,TP2_MASK);
+  	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
   	  // Process the frame (same as original project)
   	  if (commandReadyToProcess)
   	  {
@@ -257,6 +265,7 @@ void main()
   		break;
 
   	case evTimerTick:               // System timer event - Get here every 8 x125mS = 1 Sec
+  	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
   		SistemTick125mS =0;
   		// Increment the data time stamp and roll it every 24 hours
   		++dataTimeStamp;

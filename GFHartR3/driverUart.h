@@ -115,7 +115,8 @@ extern stUart   hartUart,
  */
 inline BOOLEAN isRxEmpty(stUart *pUart)
 {
-  return isEmpty(&hartUart.rxFifo);
+
+  return isEmpty(&(pUart->rxFifo));
 }
 
 /*
@@ -124,7 +125,7 @@ inline BOOLEAN isRxEmpty(stUart *pUart)
  */
 inline BOOLEAN isRxFull(stUart *pUart)
 {
-  return isFull(&hartUart.rxFifo);
+  return isFull(&(pUart->rxFifo));
 }
 
 /*
@@ -133,7 +134,7 @@ inline BOOLEAN isRxFull(stUart *pUart)
  */
 inline BOOLEAN isTxEmpty(stUart *pUart)
 {
-  return isEmpty(&hartUart.txFifo);
+  return isEmpty(&(pUart->txFifo));
 }
 
 /*
@@ -142,7 +143,7 @@ inline BOOLEAN isTxEmpty(stUart *pUart)
  */
 inline BOOLEAN isTxFull(stUart *pUart)
 {
-  return isFull(&hartUart.txFifo);
+  return isFull(&(pUart->txFifo));
 }
 
 /////////// Hart Rx, Tx, RxMode //////////////

@@ -20,8 +20,8 @@
 #define hartRxFifoLen   8
 /* We would like to write the whole message to buffer and go to sleep */
 #define hartTxFifoLen   80
-
-#define hsbRxFifoLen    64
+//  Max Rx data is 67 chars for the 50mS time slot plus gap and tolerance (+10%)
+#define hsbRxFifoLen    80
 #define hsbTxFifoLen    32
 
 // Parity settings
@@ -121,9 +121,11 @@ BOOLEAN initUart(stUart *pUart)
   //
   pUart->bRxError = FALSE;
   pUart->bNewRxChar = FALSE;
-  pUart->bRxFifoOverrun = FALSE;
   pUart->bUsciTxBufEmpty = TRUE;
+  pUart->bTxMode = FALSE;
+  pUart->bRxFifoOverrun = FALSE;
   pUart->bTxDriveEnable = FALSE;
+
   //	If Uart requires RTS control provide it here
   if(	pUart->bRtsControl && pUart->hTxDriver.disable != NULL)
   	pUart->hTxDriver.disable();
@@ -312,7 +314,8 @@ __interrupt void hsbSerialIsr(void)
 	    else
 	    if(!isRxFull(&hsbUart))                	//  put data in input stream if no errors
 	    {
-	    	hsbUart.bNewRxChar = putFifo(&hsbUart.rxFifo, rxbyte);  // Signal an Event to main loop
+	      TOGGLEB(TP_PORTOUT,TP2_MASK);
+	      hsbUart.bNewRxChar = putFifo(&hsbUart.rxFifo, rxbyte);  // Signal an Event to main loop
 	    	SET_SYSTEM_EVENT(evHsbRxChar);
 	    }
 
