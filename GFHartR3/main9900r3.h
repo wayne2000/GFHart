@@ -25,6 +25,63 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
+#define MAX_9900_TIMEOUT 4
+
+#ifdef QUICK_START
+//  we can move to main and make it local
+ /* 4000  // 400 mS */
+
+// Flag and counter to make sure the 9900 has communicated
+extern unsigned char comm9900started;
+extern unsigned int comm9900counter;
+#endif
+
+
+#ifdef QUICK_START
+extern unsigned char checkCurrentMode;
+extern unsigned char currentMsgSent;
+
+#define NO_CURRENT_MESSAGE_SENT   0xF0
+#define FIXED_CURRENT_MESSAGE_SENT  0xF1
+#define LOOP_CURRENT_MESSAGE_SENT 0xF2
+
+#ifdef WAIT_TO_START_HART
+extern unsigned char hart_comm_started;
+#endif
+// A flag that indicates that an update
+// message has been received from the 9900
+extern int updateMsgRcvd;
+// database loaded OK flag
+extern int databaseOk;
+
+#endif
+
+
+
+
+
+// HART UPDATE message
+// Variable Status 9900 --> HART
+#define UPDATE_STATUS_GOOD            '0'
+#define UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE   '1'
+#define UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE  '2'
+#define UPDATE_STATUS_SENSOR_NOT_PRESENT    '3'
+#define UPDATE_STATUS_SENSOR_UNDEFINED      '4'
+#define UPDATE_STATUS_INIT            'F'
+
+// Adjustment limits
+#define ADJ_4MA_LIMIT_MIN 3.8
+#define ADJ_4MA_LIMIT_MAX 5.0
+#define ADJ_20MA_LIMIT_MIN  19.0
+#define ADJ_20MA_LIMIT_MAX  21.0
+
+// Update command Message Indicies
+#define UPDATE_PV_START_INDEX   CMD_FIRST_DATA        // PV is the first data
+#define UPDATE_SV_START_INDEX   UPDATE_PV_START_INDEX+9   // PV=8 bytes + separator
+#define UPDATE_MA4_20_START_INDEX UPDATE_SV_START_INDEX+9   // SV=8 bytes + separator
+#define UPDATE_VAR_STATUS_INDEX   UPDATE_MA4_20_START_INDEX+9 // MA=8 bytes + separator
+#define UPDATE_COMM_STATUS_INDEX  UPDATE_VAR_STATUS_INDEX+2   //
+
 // Loop Modes
 #define LOOP_OPERATIONAL    0
 #define LOOP_FIXED_CURRENT  1
@@ -32,60 +89,97 @@
 // Sensor update rate from the 9900
 #define SENSOR_UPDATE_TIME  150     /*  can be as fast as once every 150 mS */
 
-/*************************************************************************
-  *   $GLOBAL PROTOTYPES
-*************************************************************************/
-/*************************************************************************
-  *   $GLOBAL VARIABLES
-*************************************************************************/
-// Buffer for the commands from the 9900
-extern unsigned char sz9900CmdBuffer [];
-// Buffer for the response to the 9900
-extern unsigned char sz9900RespBuffer [];
-// Do we have a host actively communicating?
-extern int hostActive;
-///
-/// flags to make sure that the loop value does not get reported if an update is in progress
-///
-extern unsigned char updateInProgress;
-extern unsigned char updateRequestSent;
-extern int8u loopMode;
-extern unsigned char PVvariableStatus;      //!< Device Variable Status for PV
-
-
-
 // Every so many update messages, we need to remind the
 // 9900 if it is in a fixed current state
-#define UPDATE_REMINDER_COUNT	20
+#define UPDATE_REMINDER_COUNT 20
 
-/////////////////////////////////////////
-// 
-// 9900 Utilities
-//
-/////////////////////////////////////////
+// 9900 Command Message Indicies
+#define CMD_ATTN_IDX  0         // The attention character is always first
+#define CMD_ADDR_IDX  CMD_ATTN_IDX+1    // Followed by the address
+#define CMD_CMD_IDX   CMD_ADDR_IDX+1    // Followed by the command
+#define CMD_1ST_SEP_IDX CMD_CMD_IDX+1   // Followed by the first separator
+#define CMD_FIRST_DATA  CMD_1ST_SEP_IDX+1 // Followed by the first data
+// 9900 Response message indicies
+#define RSP_ADDR_IDX  0         // The return address is first
+#define RSP_1ST_SEP_IDX RSP_ADDR_IDX+1    // Followed by a separator
+#define RSP_REQ_IDX   RSP_1ST_SEP_IDX+1 // Followed by a request
+#define RSP_2ND_SEP_IDX RSP_REQ_IDX+1   // Followed by a separator
+#define RSP_STATUS_IDX  RSP_2ND_SEP_IDX+1 // Followed by status
 
+#define ACK_NACK_CR_IDX RSP_REQ_IDX+1 // Index for ACK/NAK response
+
+#define POLL_LAST_REQ_BAD '0'
+#define POLL_LAST_REQ_GOOD  '1'
+#define POLL_LAST_REQ_GOOD_BUT_INCOMPLETE '2'
+
+// HART --> 9900 Response Status
+#define RESP_GOOD_NO_ACTIVE_HOST  '0'
+#define RESP_ACTIVE_HOST      '1'
+#define RESP_HOST_ERROR       '2'
+#define RESP_NO_OR_BAD_DB     '3'
+
+// HART <--> 9900 special characters
+#define ATTENTION '$'
+#define HART_ADDRESS 'H'
+#define HART_UPDATE 'U'
+#define HART_POLL 'P'
+#define HART_DB_LOAD 'D'
+#define HART_ACK 'a'
+#define HART_NACK 'n'
+#define HART_MSG_END '\r'
+#define HART_SEPARATOR ',' // Comma character
+
+
+// HART --> 9900 Response Requests
+#define RESP_REQ_NO_REQ         '0'
+#define RESP_REQ_SAVE_AND_RESTART_LOOP  '1'
+#define RESP_REQ_CHANGE_4MA_POINT   '2'
+#define RESP_REQ_CHANGE_20MA_POINT    '3'
+#define RESP_REQ_CHANGE_4MA_ADJ     '4'
+#define RESP_REQ_CHANGE_20MA_ADJ    '5'
+#define RESP_REQ_CHANGE_SET_FIXED   '6'
+#define RESP_REQ_CHANGE_RESUME_NO_SAVE  '7'
+
+
+// Database Load message status
+#define DB_EXPECT_MORE_DATA '0'
+#define DB_LAST_MESSAGE   '1'
+
+// Database Load message indices
+#define DB_ADDR_START_IDX CMD_FIRST_DATA      // The DB offset is the first data
+#define DB_BYTE_COUNT_IDX DB_ADDR_START_IDX+3   // 2 bytes + separator
+#define DB_STATUS_IDX   DB_BYTE_COUNT_IDX+3   // 2 bytes + separator
+#define DB_FIRST_DATA_IDX DB_STATUS_IDX+2     // 1 byte + separator
+
+// Message constants
+#define MIN_9900_CMD_SIZE 6 // The poll message is at least 6 characters
+
+// 9900 command, max 67 bytes
+#define MAX_9900_CMD_SIZE 67
+// 9900 response, max size 15 bytes
+#define MAX_9900_RESP_SIZE 15
 
 typedef struct st9900database
 {
-	int16u DATABASE_LENGTH;
-	char SERIAL_NUMBER [10];
-	char MODEL_STR [10];
-	char SW_VER_NUM [6];
-	fp32 LOOP_SET_LOW_LIMIT;
-	fp32 LOOP_SET_HIGH_LIMIT;
-	fp32 LOOP_SETPOINT_4MA;
-	fp32 LOOP_SETPOINT_20MA;
-	fp32 LOOP_ADJ_4MA;
-	fp32 LOOP_ADJ_20MA;
-	int8u LOOP_ERROR_VAL;
-	int8u LOOP_MODE;
-	int8u MEASUREMENT_TYPE;
-	char GF9900_MS_PARAMETER_REVISION;
-	int8u Hart_Dev_Var_Class;
-	int8u UnitsPrimaryVar;
-	int8u UnitsSecondaryVar;
-	int8u Pad;  // Just to be even
-	int16u checksum;
+  int16u DATABASE_LENGTH;
+  char SERIAL_NUMBER [10];
+  char MODEL_STR [10];
+  char SW_VER_NUM [6];
+  fp32 LOOP_SET_LOW_LIMIT;
+  fp32 LOOP_SET_HIGH_LIMIT;
+  fp32 LOOP_SETPOINT_4MA;
+  fp32 LOOP_SETPOINT_20MA;
+  fp32 LOOP_ADJ_4MA;
+  fp32 LOOP_ADJ_20MA;
+  int8u LOOP_ERROR_VAL;
+  int8u LOOP_MODE;
+  int8u MEASUREMENT_TYPE;
+  char GF9900_MS_PARAMETER_REVISION;
+  int8u Hart_Dev_Var_Class;
+  int8u UnitsPrimaryVar;
+  int8u UnitsSecondaryVar;
+  int8u Pad;  // Just to be even
+  int16u checksum;
 } DATABASE_9900;
 
 
@@ -93,68 +187,14 @@ typedef struct st9900database
 // as the database so the utilities will work
 typedef union u9900database
 {
-	int8u bytes[sizeof(DATABASE_9900)];
-	DATABASE_9900 db;
+  int8u bytes[sizeof(DATABASE_9900)];
+  DATABASE_9900 db;
 } U_DATABASE_9900;
 
-// exported database
-extern U_DATABASE_9900 u9900Database;
-extern const DATABASE_9900 factory9900db;
-extern int8u updateDelay;
-
-// 9900 utilities
-
-
-
-
-
-// 9900 Command Message Indicies
-#define CMD_ATTN_IDX 	0					// The attention character is always first
-#define CMD_ADDR_IDX 	CMD_ATTN_IDX+1		// Followed by the address
-#define CMD_CMD_IDX 	CMD_ADDR_IDX+1		// Followed by the command
-#define CMD_1ST_SEP_IDX	CMD_CMD_IDX+1		// Followed by the first separator
-#define CMD_FIRST_DATA	CMD_1ST_SEP_IDX+1	// Followed by the first data
-// 9900 Response message indicies
-#define RSP_ADDR_IDX	0					// The return address is first
-#define RSP_1ST_SEP_IDX	RSP_ADDR_IDX+1		// Followed by a separator
-#define RSP_REQ_IDX		RSP_1ST_SEP_IDX+1	// Followed by a request
-#define RSP_2ND_SEP_IDX	RSP_REQ_IDX+1		// Followed by a separator
-#define RSP_STATUS_IDX	RSP_2ND_SEP_IDX+1	// Followed by status
-
-#define ACK_NACK_CR_IDX	RSP_REQ_IDX+1	// Index for ACK/NAK response
-
-
-
-// HART --> 9900 Response Status
-#define RESP_GOOD_NO_ACTIVE_HOST	'0'
-#define RESP_ACTIVE_HOST			'1'
-#define RESP_HOST_ERROR				'2'
-#define RESP_NO_OR_BAD_DB			'3'
-// HART --> 9900 Response Requests
-#define RESP_REQ_NO_REQ					'0'
-#define RESP_REQ_SAVE_AND_RESTART_LOOP	'1'
-#define RESP_REQ_CHANGE_4MA_POINT		'2'
-#define RESP_REQ_CHANGE_20MA_POINT		'3'
-#define RESP_REQ_CHANGE_4MA_ADJ			'4'
-#define RESP_REQ_CHANGE_20MA_ADJ		'5'
-#define RESP_REQ_CHANGE_SET_FIXED		'6'
-#define RESP_REQ_CHANGE_RESUME_NO_SAVE	'7'
-
-
-// Database Load message status
-#define DB_EXPECT_MORE_DATA	'0'
-#define DB_LAST_MESSAGE		'1'
-
-// Database Load message indices
-#define DB_ADDR_START_IDX	CMD_FIRST_DATA			// The DB offset is the first data
-#define DB_BYTE_COUNT_IDX	DB_ADDR_START_IDX+3		// 2 bytes + separator
-#define DB_STATUS_IDX		DB_BYTE_COUNT_IDX+3		// 2 bytes + separator
-#define DB_FIRST_DATA_IDX	DB_STATUS_IDX+2			// 1 byte + separator
-
-// Message constants
-#define MIN_9900_CMD_SIZE	6	// The poll message is at least 6 characters
-
-// prototypes
+/*************************************************************************
+  *   $GLOBAL PROTOTYPES
+*************************************************************************/
+void hsbReceiver (BYTE rxChar);
 void Process9900Command(void);
 void Process9900Poll(void);
 void Process9900Update(void);
@@ -163,37 +203,15 @@ void Nack9900Msg(void);
 void Ack9900Msg(void);
 int16u Calc9900DbChecksum(void);
 
-extern int mainMsgInProgress;
-extern int mainMsgReadyToProcess;
-extern int mainMsgCharactersReceived;
-
-// Trim command flags
-extern unsigned char setToMinValue;
-extern unsigned char setToMaxValue;
-
 // Main UART Prototypes
-void rxMainIsr (void);
-void txMainIsr (void);
+// deprecated void rxMainIsr (void);
+void sendHsbReply(void);          // supersedes==> txMainIsr (void);
 void clearMainUartErrFlags(void);
-void enableMainRcvIntr(void);
-void disableMainRcvIntr(void);
-void enableMainTxIntr(void);
-void disableMainTxIntr(void);
-void setMainOddParity(void);
-void setMainEvenParity(void);
-void setMainNoParity(void);
 void stopMainMsgTimer(void);
 void init9900Timers(void);
 void resetForNew9900Message(void);
 void startMainXmit (void);
 
-// Utility to set fixed current mode
-unsigned char setFixedCurrentMode(float);
-// Trim the PV to 0
-//unsigned char trimPvToZero(void);
-// Trim loop current
-unsigned char trimLoopCurrentZero(float);
-unsigned char trimLoopCurrentGain(float);
 void setUpperRangeVal(void);
 void setLowerRangeVal(void);
 void setBothRangeVals(float upper, float lower);
@@ -202,9 +220,83 @@ void copy9900factoryDb(void);
 void updatePVstatus(void);
 
 
+
+/*************************************************************************
+  *   $GLOBAL VARIABLES
+*************************************************************************/
+extern unsigned char sz9900CmdBuffer [];    // Buffer for the commands from the 9900
+extern unsigned char sz9900RespBuffer [];   // Buffer for the response to the 9900
+extern int hostActive;                      // Do we have a host actively communicating?
+///
+/// flags to make sure that the loop value does not get reported if an update is in progress
+///
+extern unsigned char updateInProgress;
+extern unsigned char updateRequestSent;
+extern int8u loopMode;
+extern unsigned char PVvariableStatus;      //!< Device Variable Status for PV
+
+extern unsigned char currentMsgSent;
+
+/////////////////////////////////////////
+//
+// 9900 Utilities
+//
+/////////////////////////////////////////
+// exported database
+extern U_DATABASE_9900 u9900Database;
+extern const DATABASE_9900 factory9900db;
+extern int8u updateDelay;
+extern int mainMsgInProgress;
+extern int mainMsgReadyToProcess;
+extern int mainMsgCharactersReceived;
+// Trim command flags
+extern unsigned char setToMinValue;
+extern unsigned char setToMaxValue;
+// Utility to set fixed current mode
+unsigned char setFixedCurrentMode(float);
+// Trim the PV to 0
+//unsigned char trimPvToZero(void);
+// Trim loop current
+unsigned char trimLoopCurrentZero(float);
+unsigned char trimLoopCurrentGain(float);
+
+
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
+
+#ifdef QUICK_START
+///////////////////////////////////////////////////////////////////////////////////////////
+//
+// Function Name: stopHartComm()
+//
+// Description:
+//
+// stops the HART communication if there is a problem
+//
+// Parameters: void
+//
+// Return Type: void.
+//
+// Implementation notes:
+//
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////
+inline void stopHartComm(void)
+{
+  // Disable the HART receive interrupt & stop communicating
+  HART_IE &= ~UCRXIE; // disable USCI_A0 RX interrupt
+  P4OUT |= BIT0; // Put RTS into RCV mode
+#ifdef WAIT_TO_START_HART
+  hart_comm_started = FALSE;
+#endif
+  updateMsgRcvd = FALSE;
+  databaseOk = FALSE;
+}
+#endif
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
 // Function Name: CalculateDatabaseChecksum()

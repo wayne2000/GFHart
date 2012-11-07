@@ -10,7 +10,7 @@ ORDERED_OBJS += \
 $(GEN_CMDS__FLAG) \
 "./utilitiesr3.obj" \
 "./protocols.obj" \
-"./merge.obj" \
+"./main9900r3.obj" \
 "./hartr3.obj" \
 "./hartcommandr3.obj" \
 "./hartMain.obj" \
@@ -131,8 +131,8 @@ GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(MSP430_EXECUTABLE_OUTPUTS__QUOTED) "GFHartR3.out"
-	-$(RM) "common_h_cmdr3.pp" "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "hartcommandr3.pp" "hartr3.pp" "merge.pp" "protocols.pp" "utilitiesr3.pp" 
-	-$(RM) "common_h_cmdr3.obj" "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartcommandr3.obj" "hartr3.obj" "merge.obj" "protocols.obj" "utilitiesr3.obj" 
+	-$(RM) "common_h_cmdr3.pp" "driverUart.pp" "fifo.pp" "hardware.pp" "hartMain.pp" "hartcommandr3.pp" "hartr3.pp" "main9900r3.pp" "protocols.pp" "utilitiesr3.pp" 
+	-$(RM) "common_h_cmdr3.obj" "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartcommandr3.obj" "hartr3.obj" "main9900r3.obj" "protocols.obj" "utilitiesr3.obj" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

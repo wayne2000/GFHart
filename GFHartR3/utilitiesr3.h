@@ -59,6 +59,6 @@ int calcNumSegments (int);
 
 // Misc. utility prototypes
 float IntToFloat (int);
-
+extern unsigned int flashWriteCount;
 
 #endif /*UTILITIES_H_*/

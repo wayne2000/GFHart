@@ -36,7 +36,8 @@
 #include "driverUart.h"
 #include "protocols.h"
 #include "hartcommandr3.h"
-#include "merge.h"
+#include "utilitiesr3.h"
+// done #include "merge.h"
 #include <string.h>
 //==============================================================================
 //  LOCAL DEFINES
@@ -88,6 +89,7 @@ void initSystem(void)
 
   // MH:  I am trying to collect all initializations in a single function
   //      and also to understand the interface, keeping high level here
+  flashWriteCount =0;   // Globals init
   initStartUpData();
 
 }
@@ -177,10 +179,36 @@ void main()
   	switch(systemEvent)
   	{
   	case evHsbRxChar:               //  Main loop is too slow for HSB, we need to get all we can for every RX Char (may be more than one)
+  	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not necessary per received char. This is the minimum error handling
+  	  {
+  	    clearMainUartErrFlags();
+  	    resetForNew9900Message();
+  	    // This was done inside the RxSm - find a place to do it
+#if 0
+  	    // Check for errors first, and wait for the next message if any are found
+  	      statusReg = MAIN_STAT;
+  	      if (statusReg & (UCFE | UCOE | UCPE | UCBRK | UCRXERR))
+  	      {
+  	        // record the error
+  	        ++numMessagesErrored;
+  	        // Clear error flags
+  	        clearMainUartErrFlags();
+  	        // Ignore anything already received
+  	        resetForNew9900Message();
+  	        // Bail now
+  	        return;
+  	      }
+
+#endif
+
+
+  	  }
+  	  else
   	  while(!isRxEmpty(&hsbUart))   //  We need a 50mS timer to limit the time since the first time we enter here to the end of message
   	  {
   	    SETB(TP_PORTOUT, TP1_MASK);
-  	    ch=getcUart(&hsbUart);
+  	    hsbReceiver(ch=getcUart(&hsbUart));
+
   	    if(j < smallBufSize)
   	      sbufs[j++] = ch;
   	    else
@@ -270,6 +298,24 @@ void main()
   		// Increment the data time stamp and roll it every 24 hours
   		++dataTimeStamp;
   		++flashWriteTimer;
+
+  		// This is the equivalent function provided in hardware.c
+      #ifdef QUICK_START
+  		// This timer is only incremented when we first start up. If it hits the
+  		// timout, it means that the 9900 is disconnected and need to stop HART communication
+  		if (FALSE == comm9900started)
+  		{
+  		  ++comm9900counter; // Increment the 9900 startup timer
+  		  if (MAX_9900_TIMEOUT < comm9900counter)
+  		  {
+  		    // Reset the counter so it checks every few seconds
+  		    comm9900counter = 0;
+  		    stopHartComm();
+  		  }
+  		}
+  		#endif
+
+
   		break;
 
   	case evNull:

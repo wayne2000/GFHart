@@ -51,7 +51,7 @@
 #include "main9900r3.h"
 #include "utilitiesr3.h"
 #include "common_h_cmdr3.h"
-#include "merge.h"
+// done #include "merge.h"
 // This flag is used by commands 11 & 21 to indicate the tag did not
 // match, and that processHartCommand() should return false. All other
 // commands set the value to false.

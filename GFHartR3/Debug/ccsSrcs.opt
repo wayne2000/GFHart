@@ -1,1 +1,1 @@
-"../common_h_cmdr3.c" "../driverUart.c" "../fifo.c" "../hardware.c" "../hartMain.c" "../hartcommandr3.c" "../hartr3.c" "../merge.c" "../protocols.c" "../utilitiesr3.c" 
+"../common_h_cmdr3.c" "../driverUart.c" "../fifo.c" "../hardware.c" "../hartMain.c" "../hartcommandr3.c" "../hartr3.c" "../main9900r3.c" "../protocols.c" "../utilitiesr3.c" 

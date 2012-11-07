@@ -1,7 +1,12 @@
 //	GF Hart Communication Module - code Rev 3. renew 
 //	11/6/12
+Integrate 9900 code mainMsgReadyToProcess & Process9900Command(), main9900r3.* modify merge.*
+I overlooked QUICK_START - looking for side effects:
+
+
+//	11/6/12
 Corrected generic inline functions: isRxEmpty, isRxFull, isTxEmpty, isTxFull in driverUart.h
-Tested with 79 chars (simulating) max Hsb packet (67)
+Tested with 79 chars (simulating) max Hsb packet (67), takes 80mS
 Need to workout more on Uart error handling, so far only the flags are set with no action taken 
 
 //	11/5/12

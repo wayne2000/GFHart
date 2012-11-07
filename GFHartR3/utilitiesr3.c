@@ -51,6 +51,8 @@
 #include "hardware.h"
 #include "utilitiesr3.h"
 
+unsigned int flashWriteCount;
+
 // Flash programming utilities. Shut off all interrupts and the 
 // watchdog before calling any flash programming function to prevent
 // undesirable results
