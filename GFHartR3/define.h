@@ -23,6 +23,7 @@ typedef signed   long int       SLWORD;
 // These typedefs are used for 9900 communications
 typedef unsigned char int8u;
 typedef unsigned int int16u;
+typedef unsigned long int int32u;
 
 /*!
  * \union  fp32

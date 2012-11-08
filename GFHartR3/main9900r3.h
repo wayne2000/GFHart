@@ -25,8 +25,24 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
+
+typedef enum
+{
+  NO_CURRENT_MESSAGE_SENT =  0xF0,
+  FIXED_CURRENT_MESSAGE_SENT = 0xF1,
+  LOOP_CURRENT_MESSAGE_SENT = 0xF2
+} etCurrentMessageSent;
+
+// Loop Modes
+typedef enum
+{
+  LOOP_OPERATIONAL   = 0,
+  LOOP_FIXED_CURRENT = 1
+} etLoopModes;
+
 #define MAX_9900_TIMEOUT 4
 
+//
 #ifdef QUICK_START
 //  we can move to main and make it local
  /* 4000  // 400 mS */
@@ -36,38 +52,6 @@ extern unsigned char comm9900started;
 extern unsigned int comm9900counter;
 #endif
 
-
-#ifdef QUICK_START
-extern unsigned char checkCurrentMode;
-extern unsigned char currentMsgSent;
-
-#define NO_CURRENT_MESSAGE_SENT   0xF0
-#define FIXED_CURRENT_MESSAGE_SENT  0xF1
-#define LOOP_CURRENT_MESSAGE_SENT 0xF2
-
-#ifdef WAIT_TO_START_HART
-extern unsigned char hart_comm_started;
-#endif
-// A flag that indicates that an update
-// message has been received from the 9900
-extern int updateMsgRcvd;
-// database loaded OK flag
-extern int databaseOk;
-
-#endif
-
-
-
-
-
-// HART UPDATE message
-// Variable Status 9900 --> HART
-#define UPDATE_STATUS_GOOD            '0'
-#define UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE   '1'
-#define UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE  '2'
-#define UPDATE_STATUS_SENSOR_NOT_PRESENT    '3'
-#define UPDATE_STATUS_SENSOR_UNDEFINED      '4'
-#define UPDATE_STATUS_INIT            'F'
 
 // Adjustment limits
 #define ADJ_4MA_LIMIT_MIN 3.8
@@ -82,9 +66,6 @@ extern int databaseOk;
 #define UPDATE_VAR_STATUS_INDEX   UPDATE_MA4_20_START_INDEX+9 // MA=8 bytes + separator
 #define UPDATE_COMM_STATUS_INDEX  UPDATE_VAR_STATUS_INDEX+2   //
 
-// Loop Modes
-#define LOOP_OPERATIONAL    0
-#define LOOP_FIXED_CURRENT  1
 
 // Sensor update rate from the 9900
 #define SENSOR_UPDATE_TIME  150     /*  can be as fast as once every 150 mS */
@@ -108,9 +89,6 @@ extern int databaseOk;
 
 #define ACK_NACK_CR_IDX RSP_REQ_IDX+1 // Index for ACK/NAK response
 
-#define POLL_LAST_REQ_BAD '0'
-#define POLL_LAST_REQ_GOOD  '1'
-#define POLL_LAST_REQ_GOOD_BUT_INCOMPLETE '2'
 
 // HART --> 9900 Response Status
 #define RESP_GOOD_NO_ACTIVE_HOST  '0'
@@ -128,18 +106,6 @@ extern int databaseOk;
 #define HART_NACK 'n'
 #define HART_MSG_END '\r'
 #define HART_SEPARATOR ',' // Comma character
-
-
-// HART --> 9900 Response Requests
-#define RESP_REQ_NO_REQ         '0'
-#define RESP_REQ_SAVE_AND_RESTART_LOOP  '1'
-#define RESP_REQ_CHANGE_4MA_POINT   '2'
-#define RESP_REQ_CHANGE_20MA_POINT    '3'
-#define RESP_REQ_CHANGE_4MA_ADJ     '4'
-#define RESP_REQ_CHANGE_20MA_ADJ    '5'
-#define RESP_REQ_CHANGE_SET_FIXED   '6'
-#define RESP_REQ_CHANGE_RESUME_NO_SAVE  '7'
-
 
 // Database Load message status
 #define DB_EXPECT_MORE_DATA '0'
@@ -182,6 +148,19 @@ typedef struct st9900database
   int16u checksum;
 } DATABASE_9900;
 
+// Variable Status Flags ==== NOTE there is a repeated enum 0 ask Chuck ===
+typedef enum
+{
+  VAR_STATUS_GOOD = 0xC0,
+  VAR_STATUS_MAN_FIXED  = 0x80,
+  VAR_STATUS_INACCURATE = 0x40,
+  VAR_STATUS_BAD        = 0x00,
+  LIM_STATUS_CONST      = 0x30,
+  LIM_STATUS_HIGH       = 0x20,
+  LIM_STATUS_LOW        = 0x10,
+  LIM_STATUS_NOT_LIMITED= 0x00
+} etVariableStatus;
+
 
 // For quick updates, union the database with a byte array. Just declare this
 // as the database so the utilities will work
@@ -219,23 +198,42 @@ void convertFloatToAscii(float, unsigned char *);
 void copy9900factoryDb(void);
 void updatePVstatus(void);
 
-
-
 /*************************************************************************
   *   $GLOBAL VARIABLES
 *************************************************************************/
-extern unsigned char sz9900CmdBuffer [];    // Buffer for the commands from the 9900
-extern unsigned char sz9900RespBuffer [];   // Buffer for the response to the 9900
-extern int hostActive;                      // Do we have a host actively communicating?
+extern BOOLEAN hostActive;              // Do we have a host actively communicating?
+extern int32u num9900MessagesErrored;
+extern int32u num9900MessagesRcvd;
+extern BOOLEAN setToMinValue;           // Trim command flags
+extern BOOLEAN setToMaxValue;
+extern BOOLEAN updateMsgRcvd;           // A flag that indicates that an update message has been received from the 9900
 ///
 /// flags to make sure that the loop value does not get reported if an update is in progress
 ///
-extern unsigned char updateInProgress;
-extern unsigned char updateRequestSent;
-extern int8u loopMode;
-extern unsigned char PVvariableStatus;      //!< Device Variable Status for PV
+extern BOOLEAN updateInProgress;
+extern BOOLEAN updateRequestSent;
+extern etLoopModes loopMode;
+extern etVariableStatus PVvariableStatus;      //!< Device Variable Status for PV
 
-extern unsigned char currentMsgSent;
+
+extern BOOLEAN updateDelay;                    // If the update is delayed, set this flag
+
+#ifdef QUICK_START
+extern unsigned char checkCurrentMode;
+extern etCurrentMessageSent currentMsgSent;
+
+
+
+#ifdef WAIT_TO_START_HART
+extern unsigned char hart_comm_started;
+#endif
+
+// database loaded OK flag
+extern BOOLEAN databaseOk;
+
+#endif
+
+
 
 /////////////////////////////////////////
 //
@@ -244,11 +242,9 @@ extern unsigned char currentMsgSent;
 /////////////////////////////////////////
 // exported database
 extern U_DATABASE_9900 u9900Database;
-extern const DATABASE_9900 factory9900db;
 extern int8u updateDelay;
-extern int mainMsgInProgress;
-extern int mainMsgReadyToProcess;
-extern int mainMsgCharactersReceived;
+
+extern BOOLEAN mainMsgReadyToProcess;
 // Trim command flags
 extern unsigned char setToMinValue;
 extern unsigned char setToMaxValue;

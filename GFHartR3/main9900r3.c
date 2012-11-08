@@ -23,120 +23,134 @@
 //========================
 //  LOCAL DEFINES
 //========================
+// HART --> 9900 Response Requests
+typedef enum
+{
+  RESP_REQ_NO_REQ = '0',
+  RESP_REQ_SAVE_AND_RESTART_LOOP = '1',
+  RESP_REQ_CHANGE_4MA_POINT  = '2',
+  RESP_REQ_CHANGE_20MA_POINT =  '3',
+  RESP_REQ_CHANGE_4MA_ADJ = '4',
+  RESP_REQ_CHANGE_20MA_ADJ  =  '5',
+  RESP_REQ_CHANGE_SET_FIXED  = '6',
+  RESP_REQ_CHANGE_RESUME_NO_SAVE = '7'
+
+} etRespRequest;
+
+#define POLL_LAST_REQ_BAD '0'
+#define POLL_LAST_REQ_GOOD  '1'
+#define POLL_LAST_REQ_GOOD_BUT_INCOMPLETE '2'
+
+// HART UPDATE message
+// Variable Status 9900 --> HART
+typedef enum
+{
+  UPDATE_STATUS_GOOD = '0',
+  UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE =  '1',
+  UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE = '2',
+  UPDATE_STATUS_SENSOR_NOT_PRESENT = '3',
+  UPDATE_STATUS_SENSOR_UNDEFINED = '4',
+  UPDATE_STATUS_INIT = 'F'
+} etUpdateStatus;
+
+
 //================================
 //  LOCAL PROTOTYPES.
 //================================
 //========================
 //  GLOBAL DATA
 //========================
+U_DATABASE_9900 u9900Database;            // 9900 Database
+BOOLEAN hostActive = FALSE;               // Do we have a host actively communicating?
+int32u num9900MessagesErrored=0;
+int32u num9900MessagesRcvd =0;
+BOOLEAN mainMsgReadyToProcess = FALSE;
+BOOLEAN databaseOk = FALSE;               // database loaded OK flag
+BOOLEAN setToMinValue = FALSE;            // Trim command flags
+BOOLEAN setToMaxValue = FALSE;
+BOOLEAN updateMsgRcvd = FALSE;            // A flag that indicates that an update message has been received from the 9900
+BOOLEAN updateDelay = FALSE;              // If the update is delayed, set this flag
+etLoopModes loopMode = LOOP_OPERATIONAL;  // Loop mode is either operational, fixed 4, or fixed 20
+BOOLEAN updateInProgress = FALSE;         // flags to make sure that the loop value does not get reported if an update is in progress
+BOOLEAN updateRequestSent = FALSE;
+etVariableStatus PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;   // Device Variable Status for PV. initialize to BAD, constant
+//
 //========================
 //  LOCAL DATA
 //========================
+// 9900 Factory database
+const DATABASE_9900 factory9900db =
+{
+  62,           // DB Length
+  "4640500111", // serial number
+  "3-9900-1X ", // Model string
+  "10-04a",     // SW REV
+  0.0,          // LOOP_SET_LOW_LIMIT
+  15.0,         // LOOP_SET_HIGH_LIMIT
+  0.0,          // LOOP_SETPOINT_4MA
+  14.0,         // LOOP_SETPOINT_20MA
+  4.0,          // LOOP_ADJ_4MA
+  20.0,         // LOOP_ADJ_20MA
+  1,            // LOOP_ERROR_VAL
+  0,            // LOOP_MODE;
+  2,            // MEASUREMENT_TYPE;
+  'A',          // GF9900_MS_PARAMETER_REVISION;
+  'Q',          // Hart_Dev_Var_Class;
+  0x3b,         // UnitsPrimaryVar;
+  0x20,         // UnitsSecondaryVar;
+  0,            // Pad;  // Just to be even
+  0x0972        // checksum;
+};
 
+// flags for determining status
+
+static BOOLEAN hostError = FALSE;       // Is the host in an comm error condition?
+static int8u lastCommStatus = POLL_LAST_REQ_GOOD; // The most recent comm status from the 9900
+static etUpdateStatus lastVarStatus = UPDATE_STATUS_INIT;  // the most recent variable status from the 9900
+static etUpdateStatus varStatus = UPDATE_STATUS_GOOD;
+static BYTE sz9900CmdBuffer [MAX_9900_CMD_SIZE];    // Buffer for the commands from the 9900
+static BYTE sz9900RespBuffer [MAX_9900_RESP_SIZE];  // Buffer for the response to the 9900
+static int16u responseSize = 0;                     // the size of the response
+static int16u numMainXmitChars = 0;                 // Transmitted character counter
+static BOOLEAN mainMsgInProgress = FALSE;
+static int mainMsgCharactersReceived = 0;
+static etRespRequest request = RESP_REQ_SAVE_AND_RESTART_LOOP;   // A request is made by the HART master
+static float requestValue = 0.0;                  // There is usually a value for a request
+static float rangeRequestUpper = 0.0;
+static BOOLEAN queueResp1 = FALSE;                // We have to queue requests for responses 1 and 3
+static BOOLEAN queueResp3 = FALSE;
+static BOOLEAN saveRequested = FALSE;             // If we go to constant current mode, we need to see whether a save
+static BOOLEAN transmitMode = FALSE;              // Transmit flag. Set when transmit is active. Used to insure that the transmit & rcv
+                                                  // ISRs don't run simultaneously is required when the loop goes operational again
+static int8u modeUpdateCount = 0;                 // Add a counter to remind the 9900 of the current mode every 256 update messages
+static int32u UpdateMsgTimeout = 0;   // The timer for signaling HART is update messages don't occur
+
+//
 //==============================================================================
 // FUNCTIONS
 //==============================================================================
 
 // Diagnostics
-unsigned long numMessagesRcvd = 0;
-unsigned long numMessagesErrored = 0;
+/// MH: re-arrange
 
-// 9900 Database
-U_DATABASE_9900 u9900Database;
-// flags for determining status
-// database loaded OK flag
-int databaseOk = FALSE;
-// Do we have a host actively communicating?
-int hostActive = FALSE;
-// Is the host in an comm error condition?
-int hostError = FALSE;
-// The most recent comm status from the 9900
-int8u lastCommStatus = POLL_LAST_REQ_GOOD;
-// the most recent variable status from the 9900
-int8u lastVarStatus = UPDATE_STATUS_INIT;
-int8u varStatus = UPDATE_STATUS_GOOD;
-// Buffer for the commands from the 9900
-unsigned char sz9900CmdBuffer [MAX_9900_CMD_SIZE];
-// Buffer for the response to the 9900
-unsigned char sz9900RespBuffer [MAX_9900_RESP_SIZE];
-// the size of the response
-unsigned int responseSize = 0;
-// Transmitted character counter
-unsigned int numMainXmitChars = 0;
-int mainMsgInProgress = FALSE;
-int mainMsgReadyToProcess = FALSE;
-int mainMsgCharactersReceived = 0;
-// A flag that indicates that an update
-// message has been received from the 9900
-int updateMsgRcvd = FALSE;
-// If the update is delayed, set this flag
-int8u updateDelay = FALSE;
-// A request is made by the HART master
-int8u request = RESP_REQ_SAVE_AND_RESTART_LOOP;
-// There is usually a value for a request
-float requestValue = 0.0;
-float rangeRequestUpper = 0.0;
-// Loop mode is either operational, fixed 4, or fixed 20
-int8u loopMode = LOOP_OPERATIONAL;
-// We have to queue requests for responses 1 and 3 
-int8u queueResp1 = FALSE;
-int8u queueResp3 = FALSE;
-// If we go to constant current mode, we need to see whether a save
-// is required when the loop goes operational again
-int8u saveRequested = FALSE;
-// flags to make sure that the loop value does not
-// get reported if an update is in progress
-unsigned char updateInProgress = FALSE;
-unsigned char updateRequestSent = FALSE;
-// Trim command flags
-unsigned char setToMinValue = FALSE;
-unsigned char setToMaxValue = FALSE;
-// Transmit flag. Set when transmit is active. Used to insure that the 
-// transmit & rcv ISRs don't run simultaneously
-unsigned char transmitMode = FALSE;
-// Add a counter to remind the 9900 of the current mode every 256 update messages
-unsigned char modeUpdateCount = 0;
-// Device Variable Status for PV. initialize to BAD, constant
-unsigned char PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;
-// The timer for signaling HART is update messages don't occur
-unsigned long UpdateMsgTimeout = 0;
+
+
 
 // local prototype
 void killMainTransmit(void);
 
+
+/// MH: re-arrange
+
+
 #ifdef QUICK_START
-// Flag and counter to make sure the 9900 has communicated
-unsigned char comm9900started = FALSE;
-unsigned char checkCurrentMode = FALSE;
-unsigned int comm9900counter = 0;
-unsigned char currentMsgSent = NO_CURRENT_MESSAGE_SENT;
+BOOLEAN comm9900started = FALSE;      // Flag and counter to make sure the 9900 has communicated
+BOOLEAN checkCurrentMode = FALSE;
+int16u comm9900counter = 0;
+etCurrentMessageSent currentMsgSent = NO_CURRENT_MESSAGE_SENT;
 #endif
 
 
-
-// 9900 Factory database
-const DATABASE_9900 factory9900db =
-{
-	62,		// DB Length
-	"4640500111",	// serial number
-	"3-9900-1X ",	// Model string
-	"10-04a",	// SW REV
-	0.0,		// LOOP_SET_LOW_LIMIT
-	15.0,		// LOOP_SET_HIGH_LIMIT
-	0.0,		// LOOP_SETPOINT_4MA
-	14.0,		// LOOP_SETPOINT_20MA
-	4.0,		// LOOP_ADJ_4MA
-	20.0,		// LOOP_ADJ_20MA
-	1,	// LOOP_ERROR_VAL
-	0,	// LOOP_MODE;
-	2,	// MEASUREMENT_TYPE;
-	'A',	// GF9900_MS_PARAMETER_REVISION;
-	'Q',	// Hart_Dev_Var_Class;
-	0x3b,	// UnitsPrimaryVar;
-	0x20,	// UnitsSecondaryVar;
-	0,	// Pad;  // Just to be even
-	0x0972	// checksum;
-};
 
 
 
@@ -761,7 +775,6 @@ int16u Calc9900DbChecksum(void)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void hsbReceiver (BYTE tempChar)
 {
-	unsigned char statusReg;
 	
 #if 0	
 	// Check the transmit flag to make sure the unit hasn't lost gotten lost. Kill the 
@@ -772,7 +785,7 @@ void hsbReceiver (BYTE tempChar)
 	}
 #endif	
 	// Record the message arrival
-	++numMessagesRcvd;
+	//----> not here ++numMessagesRcvd;
 	//  Error handling at the call, note that we take the error in the UART and
 	//  not in the received (i.e. we don't care in reporting error)
 

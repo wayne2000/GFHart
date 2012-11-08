@@ -1,4 +1,6 @@
 //	GF Hart Communication Module - code Rev 3. renew 
+//	11/7/12 Working on main9900_r3
+
 //	11/6/12
 Integrate 9900 code mainMsgReadyToProcess & Process9900Command(), main9900r3.* modify merge.*
 I overlooked QUICK_START - looking for side effects:

@@ -91,6 +91,7 @@ void initSystem(void)
   //      and also to understand the interface, keeping high level here
   flashWriteCount =0;   // Globals init
   initStartUpData();
+  //init9900Vars();       // Reduce the init function of CCS and also provide ansi-c
 
 }
 
@@ -179,7 +180,7 @@ void main()
   	switch(systemEvent)
   	{
   	case evHsbRxChar:               //  Main loop is too slow for HSB, we need to get all we can for every RX Char (may be more than one)
-  	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not necessary per received char. This is the minimum error handling
+  	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not on received char. This is the minimum error handling
   	  {
   	    clearMainUartErrFlags();
   	    resetForNew9900Message();
@@ -190,7 +191,7 @@ void main()
   	      if (statusReg & (UCFE | UCOE | UCPE | UCBRK | UCRXERR))
   	      {
   	        // record the error
-  	        ++numMessagesErrored;
+  	        ++num9900MessagesErrored;
   	        // Clear error flags
   	        clearMainUartErrFlags();
   	        // Ignore anything already received

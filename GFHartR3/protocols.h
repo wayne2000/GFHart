@@ -75,10 +75,6 @@ extern unsigned char hartCommand;
 // flags to make sure that the loop value does not
 // get reported if an update is in progress
 extern unsigned char updateRequestSent;
-extern int8u loopMode;
-
-// Device Variable Status for PV
-extern unsigned char PVvariableStatus;
 
 
 // The HART error register
@@ -87,8 +83,6 @@ extern unsigned int HartErrRegister;
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
-
-
 
 
 
