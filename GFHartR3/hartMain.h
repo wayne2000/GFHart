@@ -30,6 +30,8 @@ typedef enum
   evHsbRcvReplyTimer,
   evHsbTransactionDone,
 
+  evHsbSlotTimeout,         //!< Hsb Slot timeout (2 events: MsgInProgress, SlotInactive),
+
   // System
   evTimerTick,							//!< general purpose System Time tick
 

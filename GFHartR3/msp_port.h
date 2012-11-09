@@ -68,6 +68,13 @@
 #define HART_UART_TXCTRL_PORTDIR  P4DIR
 #define HART_UART_TXCTRL_MASK   0x01
 
+
+//  High Speed Bus uses TA0
+#define HSB_SLOT_TIMER_TR       TA0R        /* Counter Value */
+#define HSB_SLOT_TIMER_CTL      TA0CTL      /* Setup Register */
+#define HSB_SLOT_TIMER_CCR      TA0CCR0     /* Compare register for Hsb slot time */
+#define HSB_SLOT_TIMER_CCTL     TA0CCTL0    /* Control register for Hsb slot */
+
 //	Hart Receiver Dog timers
 //	Reception GAP between chars uses TA1
 #define HART_RCV_GAP_TIMER_TR					TA1R				/* Count Value */

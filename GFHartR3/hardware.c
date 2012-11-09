@@ -164,6 +164,7 @@ void initClock(void)
  * 	\function  initTimers()
  * 	Configure the msp430 timers as follows:
  * 	- System timer: TB, TBCLK = ACLK/8 = 4096Hz, 8 ticks/sec,
+ * 	- HSB slot timeout, up, ACLK/8 = 4096Hz
  * 	- Hart receiver gap between characters TA1, up, ACLK/8 = 4096Hz
  * 	-	Hart slave message reply TA2, up, ACLK/8 = 4096Hz,
  */
@@ -193,10 +194,21 @@ initTimers()
   HART_RCV_REPLY_TIMER_CCR = 	REPLY_TIMER_PRESET;// CCR0
   HART_RCV_REPLY_TIMER_CCTL =	CCIE;							// Enable CCR0 interrupt
 
+#if 0
 
+  // Timer A0 = HSB slot time-out
+  HSB_SLOT_TIMER_CCTL  =      TASSEL_1  |       // Clock Source = ACLK
+                              ID_3 |            // /8
+                              TACLR;            // Clear
+  HSB_SLOT_TIMER_CCR  =       1;                // non-zero to avoid an interrupt (will be set properly at start)
+  HSB_SLOT_TIMER_CCTL =       CCIE;             // Enable interrupt
+#endif
 
 
 }
+
+
+
 /*
  * \function    initHardware
  * Initializes clock system, set GPIOs, init USB power, set Hart in Rx mode, init uC Uarts and timers
@@ -334,9 +346,23 @@ __interrupt void TIMERB1_ISR(void)
   _low_power_mode_off_on_exit();
 }
 
+
+/*!
+ * Timer A0 interrupt service routine for CC0
+ * HSB Slot Timer - Active (50mS) and Idle (100mS)
+ *
+ */
+#pragma vector=TIMER0_A0_VECTOR
+__interrupt void hsbSlotTimerISR(void)
+{
+  SET_SYSTEM_EVENT(evHsbSlotTimeout);
+  //while(1); // Trap
+  _low_power_mode_off_on_exit();
+}
+
 /*!
  * Timer A1	interrupt service routine for CC0
- * 0= Inter character GAP expired
+ * Hart Inter-character GAP expired
  *
  */
 #pragma vector=TIMER1_A0_VECTOR
@@ -347,8 +373,8 @@ __interrupt void gapTimerISR(void)
 	_low_power_mode_off_on_exit();
 }
 /*!
- * Timer A1	interrupt service routine for CC1-CC2 and TAIFG
- * 1=Slave response time
+ * Timer A2	interrupt service routine for CC0
+ * Hart slave response time
  *
  */
 #pragma vector=TIMER2_A0_VECTOR

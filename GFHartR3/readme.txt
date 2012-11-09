@@ -1,5 +1,10 @@
 //	GF Hart Communication Module - code Rev 3. renew 
 //	11/7/12 Working on main9900_r3
+11/9/12
+== Need a slotTimer that generates an event hsbSlotTimeout. 
+	- Starts at arriving $H, 50mS, will transition to Error handler on timeout (hsbMsgInProgress==TRUE)
+	- restarted at event evHsbTxDone, 100mS, will prepare for next (enableRx) on time-out (hsbMsgInProgress==FALSE)
+
 11/8/12
 Need the compile source: dummy functions enableMainTxIntr(), etc in main9900r3.c
 Finishing HSB TX and RX combined
@@ -8,7 +13,7 @@ Integrate 9900 code mainMsgReadyToProcess & Process9900Command(), main9900r3.* m
 I overlooked QUICK_START - looking for side effects:
 
 
-//	11/6/12
+//	11/6/12  == I tagged this as hsb_fetching ====
 Corrected generic inline functions: isRxEmpty, isRxFull, isTxEmpty, isTxFull in driverUart.h
 Tested with 79 chars (simulating) max Hsb packet (67), takes 80mS
 Need to workout more on Uart error handling, so far only the flags are set with no action taken 

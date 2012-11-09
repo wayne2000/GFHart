@@ -40,6 +40,16 @@
 #define GAP_TIMER_PRESET  75	  /* 18mS ~ 75 tested w 50mS~201 and hyperterminal 		 */
 #define REPLY_TIMER_PRESET 53   /* 14mS ~ 53, tested w 100mS~406 and hyperterminal */
 
+/*!
+ *  High Speed Bus timer
+ *  It has two stages hdog and are kicked everytime a char is received
+ *  -Start    when hsb receives $H, pre= HSB_ACTIVE_SLOT
+ *  -Restart  when hsb transmitter ends pre= HSB_IDLE_SLOT
+ */
+#define HSB_ACTIVE_SLOT   205   /* 50mS ~ 205   */
+#define HSB_IDLE_SLOT     410   /* 100mS ~ 410, */
+
+
 // Software Configuration Switch defines
 //  - side effects 11/8/12
 #define QUICK_START
@@ -186,6 +196,31 @@ inline void stopReplyTimerEvent(void)
 inline void startReplyTimerEvent(void)					//!< Kick the Hart DLL dog
 {
 	HART_RCV_REPLY_TIMER_CTL |= MC_1 ;						// Up mode
+}
+
+/*!
+ *  startHsbSlotTimerEvent()
+ *  Start Counting Up to indicated preset and generate an interrupt
+ *  The timer should be previously stopped (Mode =0)
+ *
+ */
+inline void startHsbSlotTimerEvent(WORD preset)
+{
+  HSB_SLOT_TIMER_CTL  &= ~MC_3;         //  This makes MC_0 = stop counting
+  HSB_SLOT_TIMER_CTL  |= TACLR;         //  Clear TAR
+  HSB_SLOT_TIMER_CCR = preset;          //  Set the preset
+  HSB_SLOT_TIMER_CTL |= MC_1;           //  Count in Up mode
+}
+
+/*!
+ *  stoptHsbSlotTimerEvent()
+ *  Set timer to mode 0 (stop counting) and clear count register
+ *
+ */
+inline void stoptHsbSlotTimerEvent(void)
+{
+  HSB_SLOT_TIMER_CTL  &= ~MC_3;     // This makes MC_0 = stop counting
+  HSB_SLOT_TIMER_CTL  |= TACLR;     // Clear TAR
 }
 
 

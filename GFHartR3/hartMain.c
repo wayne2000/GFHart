@@ -93,8 +93,6 @@ void initSystem(void)
   // MH:  I am trying to collect all initializations in a single function
   //      and also to understand the interface, keeping high level here
   flashWriteCount =0;   // Globals init
-  //init9900Vars();       // Reduce the init function of CCS and also provide ansi-c
-
 }
 
 /*!
@@ -206,12 +204,26 @@ void main()
   for(j=0;j <smallBufSize; ++j)
   	sbufs[j] =0;
   j=0;
+  BYTE bLastRxChar=0;
   while(1)													// continuous loop
   {
   	systemEvent = waitForEvent();
   	switch(systemEvent)
   	{
+  	//  High Speed Bus Events
   	case evHsbRxChar:               //  Main loop is too slow for HSB, we need to get all we can for every RX Char (may be more than one)
+  	  while(!isRxEmpty(&hsbUart))   //  We need a 50mS timer to limit the time since the first time we enter here to the end of message
+  	  {
+  	    ch=getcUart(&hsbUart);
+  	    if( bLastRxChar == ATTENTION && ch == HART_ADDRESS )
+  	      SETB(TP_PORTOUT, TP1_MASK);
+  	    else
+  	      CLEARB(TP_PORTOUT, TP1_MASK);         // signal RxDone
+  	    bLastRxChar = ch; // Provide a sequence of last two chars
+  	  }
+
+
+#if 0
   	  while(!isRxEmpty(&hsbUart))   //  We need a 50mS timer to limit the time since the first time we enter here to the end of message
   	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not on received char. This is the minimum error handling
   	      hsbErrorHandler();        //  error handler: clear bRxError and flushing rx fifo
@@ -221,9 +233,9 @@ void main()
   	    ch=getcUart(&hsbUart);
   	    if(hsbMsgInProgress)
   	    {
-  	      if(ch == HART_MSG_END)  // Test for a valid Message (is not malformed)
+  	      if(ch == HART_MSG_END)  // Test for a valid Message (one that is not malformed)
   	      {
-  	        stopHsbSlotTimer();
+  	        stoptHsbSlotTimerEvent();
   	        Process9900Command();
   	      }
   	      else
@@ -242,7 +254,13 @@ void main()
   	      }
   	    hsbLastRxChar = ch; // Provide a sequence of last two chars
   	  }
+
+#endif
   	  break;
+  	case evHsbSlotTimeout:
+
+  	  break;
+
   	case evHartRxChar:
   	  	  //SETB(TP_PORTOUT, TP1_MASK);
   	  	  ++nBytesHartRx;       // Count every received char at Hart (loop back doesn't generate and event)
@@ -320,7 +338,8 @@ void main()
   	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
   		SistemTick125mS =0;
   		// Increment the data time stamp and roll it every 24 hours
-  		dataTimeStamp += 125 << 5;    // Time Type units is 1/32 of mS (HCF_SPEC-99 section 5.3)
+  		//dataTimeStamp += 125 << 5;    // Time Type units is 1/32 of mS (HCF_SPEC-99 section 5.3)
+  		++dataTimeStamp;
   		++flashWriteTimer;
 
   		/*!
@@ -332,7 +351,7 @@ void main()
 
   		// This timer is only incremented when we first start up. If it hits the
   		// timout, it means that the 9900 is disconnected and need to stop HART communication
-  		if (FALSE == comm9900started)
+  		if (0)//FALSE == comm9900started)
   		{
   		  ++comm9900counter; // Increment the 9900 startup timer
   		  if (MAX_9900_TIMEOUT < comm9900counter)
