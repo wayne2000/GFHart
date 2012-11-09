@@ -1,18 +1,3 @@
-///////////////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) AB Tech Solution LLC 2011 All Rights Reserved.
-// This code may not be copied without the express written consent of 
-// AB Tech Solution LLC.
-//
-//
-// Client: GF
-//
-//
-// THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-// KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
-///////////////////////////////////////////////////////////////////////////////////////////
 //
 // Module Name:  common_h_cmd.c
 //
@@ -39,10 +24,13 @@
 // Date    Rev.   Engineer     Description
 // -------- ----- ------------ --------------
 // 04/23/11  0    Vijay Soni    Creation
+// 11/08/12  3    Marco Henry   Redesign Comm drivers, organize code in app layers
 //
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
- 
+//=======================
+// INCLUDES
+//=======================
 #include <msp430f5528.h>
 #include <string.h>
 #include "hardware.h"
@@ -51,11 +39,32 @@
 #include "main9900r3.h"
 #include "utilitiesr3.h"
 #include "common_h_cmdr3.h"
-// done #include "merge.h"
+
+//========================
+//  LOCAL DEFINES
+//========================
+//================================
+//  LOCAL PROTOTYPES.
+//================================
+
+//========================
+//  GLOBAL DATA
+//========================
+float lastRequestedCurrentValue = 0.0;      //!< The last commanded current value from command 40 is here
 // This flag is used by commands 11 & 21 to indicate the tag did not
 // match, and that processHartCommand() should return false. All other
 // commands set the value to false.
 unsigned char badTagFlag = FALSE;
+int32u dataTimeStamp = 0;
+
+//========================
+//  LOCAL DATA
+//========================
+
+//==============================================================================
+// FUNCTIONS
+//==============================================================================
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -711,6 +720,11 @@ void common_cmd_9(void)
 				break;
 			}
 		}
+		/*!
+		 * Command Summary Specification HCF_SPEC-99 Section 5.3 specifies that "time is contained
+		 * in a 32-bit binary integer with lsb representing 1/32 of mS"
+		 * We should multiply by timerTicks by 125 * 32
+		 */
 		// data time stamp 
 		copyLongToRespBuf(dataTimeStamp);
 	}

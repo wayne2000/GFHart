@@ -252,6 +252,15 @@ Std status 0
 #define SS0_ENVIRONMENT_OOR     0x20
 #define SS0_HARDWARE_PROBLEM    0x40
 
+// Variable Status Flags
+#define VAR_STATUS_GOOD         0xC0
+#define VAR_STATUS_MAN_FIXED    0x80
+#define VAR_STATUS_INACCURATE   0x40
+#define VAR_STATUS_BAD          0x00
+#define LIM_STATUS_CONST        0x30
+#define LIM_STATUS_HIGH         0x20
+#define LIM_STATUS_LOW          0x10
+#define LIM_STATUS_NOT_LIMITED  0x00
 
 typedef struct stHartStartupV   // HART 7 compliant
 {

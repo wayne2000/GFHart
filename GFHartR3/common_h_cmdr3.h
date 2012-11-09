@@ -1,17 +1,3 @@
-//////////////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) AB Tech Solution LLC 2011 All Rights Reserved.
-// This code may not be copied without the express written consent of 
-// AB Tech Solution LLC.
-//
-//
-// Client: GF
-//
-//
-// THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-// KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
 // Header File Name:  common_h_cmd.h
@@ -25,13 +11,24 @@
 // Date    Rev.   Engineer     Description
 // -------- ----- ------------ --------------
 // 04/23/11  0    Vijay Soni    Creation
-//
+// 11/08/12  3    Marco Henry   Redesign Comm drivers, organize code in app layers
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 #ifndef COMMON_H_CMD_H_
 #define COMMON_H_CMD_H_
 
+/*************************************************************************
+  *   $INCLUDES
+*************************************************************************/
+
+/*************************************************************************
+  *   $DEFINES
+*************************************************************************/
+
+/*************************************************************************
+  *   $GLOBAL PROTOTYPES
+*************************************************************************/
 void common_cmd_0(void);
 void common_cmd_1(void);
 void common_cmd_2(void);
@@ -70,7 +67,6 @@ void common_cmd_57 (void);
 void common_cmd_58 (void);
 void common_cmd_110 (void);
 
-
 void mfr_cmd_219(void);
 void mfr_cmd_220(void);
 void mfr_cmd_221(void);
@@ -82,6 +78,18 @@ void common_tx_comm_error(void);
 
 float CalculatePercentRange(float, float, float);
 
+/*************************************************************************
+ *   $GLOBAL VARIABLES
+ *
+ *
+ */
+extern float lastRequestedCurrentValue;       // The laast commanded current from command 40
 extern unsigned char badTagFlag;
+extern int32u dataTimeStamp;                  // Time added for command 9
+
+/*************************************************************************
+  *   $INLINE FUNCTIONS
+*************************************************************************/
+
 
 #endif /*COMMON_H_CMD_H_*/

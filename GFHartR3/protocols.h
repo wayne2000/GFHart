@@ -44,8 +44,6 @@ extern unsigned char szHartResp [];       // The HART response buffer
 extern unsigned int respBufferSize;         // The size of the response buffer
 extern int rcvBroadcastAddr;                // broadcas error received flag
 
-extern long dataTimeStamp;                  // Timer added for command 9
-extern float lastRequestedCurrentValue;     // The laast commanded current from command 40
 
 // Message Counters
 extern unsigned long xmtMsgCounter;

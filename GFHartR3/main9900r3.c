@@ -19,39 +19,36 @@
 #include "hardware.h"
 #include "hartr3.h"
 #include "main9900r3.h"
+#include "common_h_cmdr3.h"
 
 //========================
 //  LOCAL DEFINES
 //========================
-// HART --> 9900 Response Requests
-typedef enum
-{
-  RESP_REQ_NO_REQ = '0',
-  RESP_REQ_SAVE_AND_RESTART_LOOP = '1',
-  RESP_REQ_CHANGE_4MA_POINT  = '2',
-  RESP_REQ_CHANGE_20MA_POINT =  '3',
-  RESP_REQ_CHANGE_4MA_ADJ = '4',
-  RESP_REQ_CHANGE_20MA_ADJ  =  '5',
-  RESP_REQ_CHANGE_SET_FIXED  = '6',
-  RESP_REQ_CHANGE_RESUME_NO_SAVE = '7'
 
-} etRespRequest;
+// HART --> 9900 Response Requests
+#define RESP_REQ_NO_REQ         '0'
+#define RESP_REQ_SAVE_AND_RESTART_LOOP  '1'
+#define RESP_REQ_CHANGE_4MA_POINT   '2'
+#define RESP_REQ_CHANGE_20MA_POINT    '3'
+#define RESP_REQ_CHANGE_4MA_ADJ     '4'
+#define RESP_REQ_CHANGE_20MA_ADJ    '5'
+#define RESP_REQ_CHANGE_SET_FIXED   '6'
+#define RESP_REQ_CHANGE_RESUME_NO_SAVE  '7'
 
 #define POLL_LAST_REQ_BAD '0'
 #define POLL_LAST_REQ_GOOD  '1'
 #define POLL_LAST_REQ_GOOD_BUT_INCOMPLETE '2'
 
 // HART UPDATE message
+
 // Variable Status 9900 --> HART
-typedef enum
-{
-  UPDATE_STATUS_GOOD = '0',
-  UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE =  '1',
-  UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE = '2',
-  UPDATE_STATUS_SENSOR_NOT_PRESENT = '3',
-  UPDATE_STATUS_SENSOR_UNDEFINED = '4',
-  UPDATE_STATUS_INIT = 'F'
-} etUpdateStatus;
+#define UPDATE_STATUS_GOOD            '0'
+#define UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE   '1'
+#define UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE  '2'
+#define UPDATE_STATUS_SENSOR_NOT_PRESENT    '3'
+#define UPDATE_STATUS_SENSOR_UNDEFINED      '4'
+#define UPDATE_STATUS_INIT            'F'
+
 
 
 //================================
@@ -70,10 +67,13 @@ BOOLEAN setToMinValue = FALSE;            // Trim command flags
 BOOLEAN setToMaxValue = FALSE;
 BOOLEAN updateMsgRcvd = FALSE;            // A flag that indicates that an update message has been received from the 9900
 BOOLEAN updateDelay = FALSE;              // If the update is delayed, set this flag
-etLoopModes loopMode = LOOP_OPERATIONAL;  // Loop mode is either operational, fixed 4, or fixed 20
+int8u loopMode = LOOP_OPERATIONAL;        // Loop mode is either operational, fixed 4, or fixed 20
 BOOLEAN updateInProgress = FALSE;         // flags to make sure that the loop value does not get reported if an update is in progress
 BOOLEAN updateRequestSent = FALSE;
-etVariableStatus PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;   // Device Variable Status for PV. initialize to BAD, constant
+int8u PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;   // Device Variable Status for PV. initialize to BAD, constant
+BOOLEAN comm9900started = FALSE;          // Flag and counter to make sure the 9900 has communicated
+
+BYTE sz9900CmdBuffer [MAX_9900_CMD_SIZE];    // Buffer for the commands from the 9900
 //
 //========================
 //  LOCAL DATA
@@ -104,17 +104,16 @@ const DATABASE_9900 factory9900db =
 
 // flags for determining status
 
-static BOOLEAN hostError = FALSE;       // Is the host in an comm error condition?
-static int8u lastCommStatus = POLL_LAST_REQ_GOOD; // The most recent comm status from the 9900
-static etUpdateStatus lastVarStatus = UPDATE_STATUS_INIT;  // the most recent variable status from the 9900
-static etUpdateStatus varStatus = UPDATE_STATUS_GOOD;
-static BYTE sz9900CmdBuffer [MAX_9900_CMD_SIZE];    // Buffer for the commands from the 9900
+static BOOLEAN hostError = FALSE;                   // Is the host in an comm error condition?
+static int8u lastCommStatus = POLL_LAST_REQ_GOOD;   // The most recent comm status from the 9900
+static int8u lastVarStatus = UPDATE_STATUS_INIT;    // the most recent variable status from the 9900
+static int8u varStatus = UPDATE_STATUS_GOOD;
 static BYTE sz9900RespBuffer [MAX_9900_RESP_SIZE];  // Buffer for the response to the 9900
 static int16u responseSize = 0;                     // the size of the response
 static int16u numMainXmitChars = 0;                 // Transmitted character counter
 static BOOLEAN mainMsgInProgress = FALSE;
 static int mainMsgCharactersReceived = 0;
-static etRespRequest request = RESP_REQ_SAVE_AND_RESTART_LOOP;   // A request is made by the HART master
+static int8u request = RESP_REQ_SAVE_AND_RESTART_LOOP;   // A request is made by the HART master
 static float requestValue = 0.0;                  // There is usually a value for a request
 static float rangeRequestUpper = 0.0;
 static BOOLEAN queueResp1 = FALSE;                // We have to queue requests for responses 1 and 3
@@ -130,26 +129,33 @@ static int32u UpdateMsgTimeout = 0;   // The timer for signaling HART is update 
 // FUNCTIONS
 //==============================================================================
 
-// Diagnostics
-/// MH: re-arrange
 
 
-
-
-// local prototype
-void killMainTransmit(void);
-
-
-/// MH: re-arrange
-
-
-#ifdef QUICK_START
-BOOLEAN comm9900started = FALSE;      // Flag and counter to make sure the 9900 has communicated
 BOOLEAN checkCurrentMode = FALSE;
 int16u comm9900counter = 0;
-etCurrentMessageSent currentMsgSent = NO_CURRENT_MESSAGE_SENT;
-#endif
+int8u currentMsgSent = NO_CURRENT_MESSAGE_SENT;
 
+// TODO:  Want to successfully compile
+void enableMainTxIntr()
+{
+  _no_operation();
+
+}
+void disableMainTxIntr()
+{
+  _no_operation();
+
+}
+void enableMainRcvIntr()
+{
+  _no_operation();
+
+}
+void disableMainRcvIntr()
+{
+  _no_operation();
+
+}
 
 
 
@@ -775,15 +781,8 @@ int16u Calc9900DbChecksum(void)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void hsbReceiver (BYTE tempChar)
 {
-	
-#if 0	
-	// Check the transmit flag to make sure the unit hasn't lost gotten lost. Kill the 
-	// transmit process if it is
-	if (TRUE == transmitMode)
-	{
-		killMainTransmit();
-	}
-#endif	
+#if 0
+  All code is done in main
 	// Record the message arrival
 	//----> not here ++numMessagesRcvd;
 	//  Error handling at the call, note that we take the error in the UART and
@@ -833,6 +832,7 @@ void hsbReceiver (BYTE tempChar)
 		// Shut off the receive interrupt until the received message is handled
 		disableMainRcvIntr();
 	}
+#endif
 }
 
 /*!
@@ -1409,30 +1409,7 @@ void copy9900factoryDb(void)
 	memcpy(&u9900Database, &factory9900db, sizeof(DATABASE_9900));
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: killMainTransmit()
-//
-// Description:
-//
-// kills the transmit process
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void killMainTransmit(void)
-{
-	// disable the Tx interrupt
-	disableMainTxIntr();
-	// turn the transmit mode flag off
-	transmitMode = FALSE;
-}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

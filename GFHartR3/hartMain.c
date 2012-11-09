@@ -37,6 +37,8 @@
 #include "protocols.h"
 #include "hartcommandr3.h"
 #include "utilitiesr3.h"
+#include "main9900r3.h"
+#include "common_h_cmdr3.h"
 // done #include "merge.h"
 #include <string.h>
 //==============================================================================
@@ -55,6 +57,7 @@ unsigned int sEvents[1 + (evLastEvent +1)/16];	// Array where events are stored
 //  LOCAL DATA
 //==============================================================================
 volatile int16u  low_power=0;
+WORD i9900CmdBuf=0;    // Index to sz9900CmdBuffer[]
 //==============================================================================
 // FUNCTIONS
 //==============================================================================
@@ -90,7 +93,6 @@ void initSystem(void)
   // MH:  I am trying to collect all initializations in a single function
   //      and also to understand the interface, keeping high level here
   flashWriteCount =0;   // Globals init
-  initStartUpData();
   //init9900Vars();       // Reduce the init function of CCS and also provide ansi-c
 
 }
@@ -148,12 +150,42 @@ tEvent waitForEvent()
   return evNull;	                // Never happens, unless unregistered event. Returning NULL is safer (I think)
 }
 
+void hsbErrorHandler(void)
+{
+  BYTE ch;
+  clearMainUartErrFlags();
+  resetForNew9900Message();
+  // Flush the Hsb Rx Fifo
+  while(!isRxEmpty(&hsbUart) )
+    getcUart(&hsbUart);
+
+  // This was done inside the RxSm - find a place to do it
+  #if 0
+          // Check for errors first, and wait for the next message if any are found
+            statusReg = MAIN_STAT;
+            if (statusReg & (UCFE | UCOE | UCPE | UCBRK | UCRXERR))
+            {
+              // record the error
+              ++num9900MessagesErrored;
+              // Clear error flags
+              clearMainUartErrFlags();
+              // Ignore anything already received
+              resetForNew9900Message();
+              // Bail now
+              return;
+            }
+
+  #endif
+
+}
 
 /////////////////////////////////
 #define smallBufSize 80
 void main()
 {
   volatile unsigned int i;
+  BOOLEAN hartCommStarted = TRUE;
+  BOOLEAN hsbMsgInProgress = FALSE;
   WORD flashWriteTimer=0,
         Cmds[10],nTotalBytes[10];  // Small debug: list previous Commands and transactions
   WORD  nBytesHartTransaction, nBytesHartRx;  // Not initialized, but allow a few loop scans
@@ -180,45 +212,36 @@ void main()
   	switch(systemEvent)
   	{
   	case evHsbRxChar:               //  Main loop is too slow for HSB, we need to get all we can for every RX Char (may be more than one)
-  	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not on received char. This is the minimum error handling
-  	  {
-  	    clearMainUartErrFlags();
-  	    resetForNew9900Message();
-  	    // This was done inside the RxSm - find a place to do it
-#if 0
-  	    // Check for errors first, and wait for the next message if any are found
-  	      statusReg = MAIN_STAT;
-  	      if (statusReg & (UCFE | UCOE | UCPE | UCBRK | UCRXERR))
-  	      {
-  	        // record the error
-  	        ++num9900MessagesErrored;
-  	        // Clear error flags
-  	        clearMainUartErrFlags();
-  	        // Ignore anything already received
-  	        resetForNew9900Message();
-  	        // Bail now
-  	        return;
-  	      }
-
-#endif
-
-
-  	  }
-  	  else
   	  while(!isRxEmpty(&hsbUart))   //  We need a 50mS timer to limit the time since the first time we enter here to the end of message
+  	  if(hsbUart.bRxError)          //  Handle error on "Uart" basis not on received char. This is the minimum error handling
+  	      hsbErrorHandler();        //  error handler: clear bRxError and flushing rx fifo
+  	  else
   	  {
-  	    SETB(TP_PORTOUT, TP1_MASK);
-  	    hsbReceiver(ch=getcUart(&hsbUart));
+  	    static BYTE hsbLastRxChar=0;
+  	    ch=getcUart(&hsbUart);
+  	    if(hsbMsgInProgress)
+  	    {
+  	      if(ch == HART_MSG_END)  // Test for a valid Message (is not malformed)
+  	      {
+  	        stopHsbSlotTimer();
+  	        Process9900Command();
+  	      }
+  	      else
+  	        if(i9900CmdBuf < MAX_9900_CMD_SIZE )
+  	          sz9900CmdBuffer[i9900CmdBuf++] = ch;
+  	        else
+  	          hsbErrorHandler();        //  error handler ignore current message, we have cmd buffer overrun
 
-  	    if(j < smallBufSize)
-  	      sbufs[j++] = ch;
+  	    }
   	    else
-  	      _no_operation();
-  	    CLEARB(TP_PORTOUT, TP1_MASK);
+  	      if(hsbLastRxChar == ATTENTION && ch == HART_ADDRESS)
+  	      {
+  	        // Init the reception of Hsb Command
+  	        hsbMsgInProgress = TRUE;
+  	        i9900CmdBuf = 0;          // Indicates position in buffer and number of rx chars
+  	      }
+  	    hsbLastRxChar = ch; // Provide a sequence of last two chars
   	  }
-  	  //  	  		putcUart(ch, &hsbUart);
-  	  _no_operation();
-  	  CLEARB(TP_PORTOUT, TP1_MASK);
   	  break;
   	case evHartRxChar:
   	  	  //SETB(TP_PORTOUT, TP1_MASK);
@@ -297,11 +320,16 @@ void main()
   	  //TOGGLEB(TP_PORTOUT,TP2_MASK);
   		SistemTick125mS =0;
   		// Increment the data time stamp and roll it every 24 hours
-  		++dataTimeStamp;
+  		dataTimeStamp += 125 << 5;    // Time Type units is 1/32 of mS (HCF_SPEC-99 section 5.3)
   		++flashWriteTimer;
 
-  		// This is the equivalent function provided in hardware.c
-      #ifdef QUICK_START
+  		/*!
+  		 *  TODO
+  		 *  Provide an equivalent function that after MAX_9900_TIMEOUT (4 seconds)
+  		 *  without 9900 comm (comm9900started) we stop hart comm (stopHartComm();)
+  		 *
+  		 */
+
   		// This timer is only incremented when we first start up. If it hits the
   		// timout, it means that the 9900 is disconnected and need to stop HART communication
   		if (FALSE == comm9900started)
@@ -311,12 +339,12 @@ void main()
   		  {
   		    // Reset the counter so it checks every few seconds
   		    comm9900counter = 0;
-  		    stopHartComm();
+  		    //  inline the Code for Stop Hart Communication
+  		    hartUart.hTxDriver.disable(); // Put RTS into RCV mode
+  		    hartCommStarted = FALSE;
+  		    databaseOk = FALSE;
   		  }
   		}
-  		#endif
-
-
   		break;
 
   	case evNull:

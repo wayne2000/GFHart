@@ -84,7 +84,6 @@ unsigned int respBufferSize;                //!< size of the response buffer
 
 unsigned int HartErrRegister = NO_HART_ERRORS;  //!< The HART error register
 unsigned int respXmitIndex = 0;             //!< The index of the next response byte to transmit
-float lastRequestedCurrentValue = 0.0;      //!< The last commanded current value from command 40 is here
 int checkCarrierDetect (void);              //!< other system prototypes
 
 unsigned long xmtMsgCounter = 0;            //!< MH: counts Hart messages at some point in SM

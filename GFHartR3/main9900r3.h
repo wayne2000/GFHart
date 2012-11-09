@@ -26,19 +26,13 @@
   *   $DEFINES
 *************************************************************************/
 
-typedef enum
-{
-  NO_CURRENT_MESSAGE_SENT =  0xF0,
-  FIXED_CURRENT_MESSAGE_SENT = 0xF1,
-  LOOP_CURRENT_MESSAGE_SENT = 0xF2
-} etCurrentMessageSent;
+#define NO_CURRENT_MESSAGE_SENT   0xF0
+#define FIXED_CURRENT_MESSAGE_SENT  0xF1
+#define LOOP_CURRENT_MESSAGE_SENT 0xF2
 
 // Loop Modes
-typedef enum
-{
-  LOOP_OPERATIONAL   = 0,
-  LOOP_FIXED_CURRENT = 1
-} etLoopModes;
+#define LOOP_OPERATIONAL  0
+#define LOOP_FIXED_CURRENT  1
 
 #define MAX_9900_TIMEOUT 4
 
@@ -48,7 +42,7 @@ typedef enum
  /* 4000  // 400 mS */
 
 // Flag and counter to make sure the 9900 has communicated
-extern unsigned char comm9900started;
+extern BOOLEAN comm9900started;
 extern unsigned int comm9900counter;
 #endif
 
@@ -148,19 +142,6 @@ typedef struct st9900database
   int16u checksum;
 } DATABASE_9900;
 
-// Variable Status Flags ==== NOTE there is a repeated enum 0 ask Chuck ===
-typedef enum
-{
-  VAR_STATUS_GOOD = 0xC0,
-  VAR_STATUS_MAN_FIXED  = 0x80,
-  VAR_STATUS_INACCURATE = 0x40,
-  VAR_STATUS_BAD        = 0x00,
-  LIM_STATUS_CONST      = 0x30,
-  LIM_STATUS_HIGH       = 0x20,
-  LIM_STATUS_LOW        = 0x10,
-  LIM_STATUS_NOT_LIMITED= 0x00
-} etVariableStatus;
-
 
 // For quick updates, union the database with a byte array. Just declare this
 // as the database so the utilities will work
@@ -198,6 +179,13 @@ void convertFloatToAscii(float, unsigned char *);
 void copy9900factoryDb(void);
 void updatePVstatus(void);
 
+// Trim the PV to 0
+//unsigned char trimPvToZero(void);
+// Trim loop current
+unsigned char trimLoopCurrentZero(float);
+unsigned char trimLoopCurrentGain(float);
+
+
 /*************************************************************************
   *   $GLOBAL VARIABLES
 *************************************************************************/
@@ -212,28 +200,15 @@ extern BOOLEAN updateMsgRcvd;           // A flag that indicates that an update 
 ///
 extern BOOLEAN updateInProgress;
 extern BOOLEAN updateRequestSent;
-extern etLoopModes loopMode;
-extern etVariableStatus PVvariableStatus;      //!< Device Variable Status for PV
+extern int8u loopMode;
+extern int8u PVvariableStatus;      //!< Device Variable Status for PV
 
 
-extern BOOLEAN updateDelay;                    // If the update is delayed, set this flag
-
-#ifdef QUICK_START
+extern BOOLEAN updateDelay;                   // If the update is delayed, set this flag
 extern unsigned char checkCurrentMode;
-extern etCurrentMessageSent currentMsgSent;
-
-
-
-#ifdef WAIT_TO_START_HART
+extern int8u currentMsgSent;
 extern unsigned char hart_comm_started;
-#endif
-
-// database loaded OK flag
-extern BOOLEAN databaseOk;
-
-#endif
-
-
+extern BOOLEAN databaseOk;                    // database loaded OK flag
 
 /////////////////////////////////////////
 //
@@ -250,47 +225,12 @@ extern unsigned char setToMinValue;
 extern unsigned char setToMaxValue;
 // Utility to set fixed current mode
 unsigned char setFixedCurrentMode(float);
-// Trim the PV to 0
-//unsigned char trimPvToZero(void);
-// Trim loop current
-unsigned char trimLoopCurrentZero(float);
-unsigned char trimLoopCurrentGain(float);
 
-
+extern BYTE sz9900CmdBuffer [];               // Buffer for the commands from the 9900
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
 
-#ifdef QUICK_START
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: stopHartComm()
-//
-// Description:
-//
-// stops the HART communication if there is a problem
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-inline void stopHartComm(void)
-{
-  // Disable the HART receive interrupt & stop communicating
-  HART_IE &= ~UCRXIE; // disable USCI_A0 RX interrupt
-  P4OUT |= BIT0; // Put RTS into RCV mode
-#ifdef WAIT_TO_START_HART
-  hart_comm_started = FALSE;
-#endif
-  updateMsgRcvd = FALSE;
-  databaseOk = FALSE;
-}
-#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
