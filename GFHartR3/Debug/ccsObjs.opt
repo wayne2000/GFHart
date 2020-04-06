@@ -1,1 +1,1 @@
-"./utilitiesr3.obj" "./protocols.obj" "./main9900r3.obj" "./hartr3.obj" "./hartcommandr3.obj" "./hartMain.obj" "./hardware.obj" "./fifo.obj" "./driverUart.obj" "./common_h_cmdr3.obj" -l"libc.a" "../lnk_msp430f5528.cmd" 
+"./common_h_cmdr3.obj" "./driverUart.obj" "./fifo.obj" "./hardware.obj" "./hartMain.obj" "./hartcommandr3.obj" "./hartr3.obj" "./main9900r3.obj" "./protocols.obj" "./utilitiesr3.obj" "../lnk_msp430f5528.cmd" -llibc.a 

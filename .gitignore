@@ -1,0 +1,6 @@
+*.pp
+*.mk
+*.map
+*.out
+*.obj
+*/Debug/*
