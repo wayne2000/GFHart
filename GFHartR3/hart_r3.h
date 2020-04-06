@@ -1,23 +1,5 @@
 #ifndef HART_H_
 #define HART_H_
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Header File Name:  hartr3.h
-//
-// Description:
-//
-// This module provides HART interface. Functions are implemented in 
-// the file, hart.c
-//
-// Revision History:
-// Date    Rev.   Engineer     Description
-// -------- ----- ------------ --------------
-// 04/01/11  0    Vijay Soni    Creation
-//
-// 04/02/11  1    Patel    	Add funcations
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
 
 /*************************************************************************
   *   $INCLUDES
@@ -187,6 +169,21 @@
 #define FD_STATUS_PV_ANALOG_SATURATED   0x04
 #define FD_STATUS_SV_OUT_OF_LIMITS      0x02
 #define FD_STATUS_PV_OUT_OF_LIMITS      0x01
+/*!
+ *  Added user test case:
+ *  If no Hart Master sending cyclical frames we need to generate a timed event
+ *  to synchronize NV-ram. Define is in 125mS ticks
+ */
+#define HART_CONFIG_CHANGE_SYNC_TICKS  12
+/*!
+ *  hostActive bit sent to 9900 needs to be:
+ *  0   Hart Master is not present
+ *  1   Set as soon as a Hart message is received
+ *  1->0  After HOST_ACTIVE_TIMEOUT of no hart activity, bit is cleared
+ *
+ *  Define is compared with x125mS ticks, 16 is 2 Secs
+ */
+#define HOST_ACTIVE_TIMEOUT   16
 
 // Device Variable Codes
 #define DVC_PV                      0
@@ -261,7 +258,12 @@ Std status 0
 #define LIM_STATUS_HIGH         0x20
 #define LIM_STATUS_LOW          0x10
 #define LIM_STATUS_NOT_LIMITED  0x00
-
+/*!
+ * The volatile section of local startup data
+ *
+ * This is the portion of local data that is always loaded with factory values
+ *
+ */
 typedef struct stHartStartupV   // HART 7 compliant
 {
     // The first member must be an unsigned char
@@ -327,6 +329,13 @@ typedef struct stHartStartupV   // HART 7 compliant
 // Index 17 = the number of received characters exceed the buffer
 // Index 18 = the number of fatal SOM characters
  
+/*!
+ * The non-volatile section of local startup data
+ *
+ * This is the portion of local data that is loaded from flash.
+ * Modifications are stored as necessary
+ *
+ */
 typedef struct stHartStartupNV   // HART 7 compliant
 {
     // The first member must be an unsigned char
@@ -371,19 +380,27 @@ typedef struct stHartStartupNV   // HART 7 compliant
     //unsigned int errorCounter[19];
 } HART_STARTUP_DATA_NONVOLATILE;
 
-// Utility unions
+/*!
+ *  Long-Float utility unions
+ */
 typedef union uLongFloat
 {
     float fVal;
     unsigned char b[4];
 } U_LONG_FLOAT;
 
+/*!
+ *  Integer-Bytes utility unions
+ */
 typedef union uIntByte
 {
     int i;
     unsigned char b[2];
 } U_SHORT_INT;
 
+/*!
+ *  Long-Bytes utility unions
+ */
 typedef union uLongByte
 {
     long i;

@@ -8,16 +8,18 @@ GEN_OPTS__FLAG :=
 GEN_CMDS__FLAG := 
 
 ORDERED_OBJS += \
-"./common_h_cmdr3.obj" \
+"./common_h_cmd_r3.obj" \
 "./driverUart.obj" \
+"./errorHandler.obj" \
 "./fifo.obj" \
 "./hardware.obj" \
 "./hartMain.obj" \
-"./hartcommandr3.obj" \
-"./hartr3.obj" \
-"./main9900r3.obj" \
+"./hart_r3.obj" \
+"./hartcommand_r3.obj" \
+"./main9900_r3.obj" \
+"./pre_init.obj" \
 "./protocols.obj" \
-"./utilitiesr3.obj" \
+"./utilities_r3.obj" \
 "../lnk_msp430f5528.cmd" \
 $(GEN_CMDS__FLAG) \
 -llibc.a \
@@ -147,8 +149,8 @@ GFHartR3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(EXE_OUTPUTS__QUOTED)
-	-$(RM) "common_h_cmdr3.obj" "driverUart.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hartcommandr3.obj" "hartr3.obj" "main9900r3.obj" "protocols.obj" "utilitiesr3.obj" 
-	-$(RM) "common_h_cmdr3.d" "driverUart.d" "fifo.d" "hardware.d" "hartMain.d" "hartcommandr3.d" "hartr3.d" "main9900r3.d" "protocols.d" "utilitiesr3.d" 
+	-$(RM) "common_h_cmd_r3.obj" "driverUart.obj" "errorHandler.obj" "fifo.obj" "hardware.obj" "hartMain.obj" "hart_r3.obj" "hartcommand_r3.obj" "main9900_r3.obj" "pre_init.obj" "protocols.obj" "utilities_r3.obj" 
+	-$(RM) "common_h_cmd_r3.d" "driverUart.d" "errorHandler.d" "fifo.d" "hardware.d" "hartMain.d" "hart_r3.d" "hartcommand_r3.d" "main9900_r3.d" "pre_init.d" "protocols.d" "utilities_r3.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

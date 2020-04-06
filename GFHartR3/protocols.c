@@ -1,9 +1,13 @@
-/*
- * protocols.c
+/*!
+ *  \file   protocols.c
+ *  \brief  Hart Receiver state machine and all auxiliary functions to handle
+ *  message reception has been grouped in this file
+ *
  *
  *  Created on: Sep 19, 2012
- *      Author: Marco.HenryGin
+ *  \author: MH
  */
+
 //==============================================================================
 // INCLUDES
 //==============================================================================
@@ -13,11 +17,10 @@
 #include "msp_port.h"
 #include "protocols.h"
 #include "driverUart.h"
-#include "hartr3.h"
-#include "main9900r3.h"
+#include "hart_r3.h"
+#include "main9900_r3.h"
 #include "hardware.h"
-#// done include "merge.h"
-#include "utilitiesr3.h"
+#include "utilities_r3.h"
 
 //==============================================================================
 //  LOCAL DEFINES
@@ -28,7 +31,7 @@
 #define MAX_HART_DATA_SIZE 255
 
 // Defines
-#define HART_PREAMBLE       0xFF
+
 #define MIN_PREAMBLE_BYTES  2
 #define MAX_PREAMBLE_BYTES  30
 
@@ -57,7 +60,6 @@ static int isAddressValid(void);
 //==============================================================================
 //  GLOBAL DATA
 //==============================================================================
-
 ///
 /// command information
 ///
@@ -84,6 +86,7 @@ unsigned int respBufferSize;                //!< size of the response buffer
 
 unsigned int HartErrRegister = NO_HART_ERRORS;  //!< The HART error register
 unsigned int respXmitIndex = 0;             //!< The index of the next response byte to transmit
+float lastRequestedCurrentValue = 0.0;      //!< The last commanded current value from command 40 is here
 int checkCarrierDetect (void);              //!< other system prototypes
 
 unsigned long xmtMsgCounter = 0;            //!< MH: counts Hart messages at some point in SM
@@ -95,6 +98,13 @@ unsigned char szHartCmd [MAX_RCV_BYTE_COUNT];       //!< Rcvd message buffer (st
 //==============================================================================
 
 // detect compile error static unsigned char * pRespBuffer = NULL;       //!< Pointer to the response buffer
+/*!
+ * Flag to indicate that Hart receiver state machine should be initiated
+ *
+ * This flag is set to reset the Hart Receiver State Machine to init state. Initialization
+ * happens at next state call.
+ *
+ */
 static BOOLEAN  bInitHartSm = FALSE;
 
 
@@ -142,7 +152,7 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
 
 /*!
- * \function    initHartRxSm()
+ * \fn    initHartRxSm()
  *
  * This function perform the global init of Hart Receiver state machine. Ideally this
  * functionshould be implemented inside the state function, but the spread of globals
@@ -151,7 +161,7 @@ unsigned int ErrReport[15] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
  * Implementation notes:
  * Here the global variables that were used by previous state machine are reset.
  * Other variables are initalized internally in the internal init state.
- * The signal bInitHartSm is set to perform the remainding intialization inside
+ * The signal bInitHartSm is set to perform the remainder initialization inside
  * the function, which is performed when the new character event is captured at main loop
  *
  * This function partially replaces prepareToRxFrame(), rest is done at its context
@@ -162,7 +172,7 @@ void initHartRxSm(void)
   hartFrameRcvd = FALSE;
   commandReadyToProcess = FALSE;
   //  Status Report
-  hostActive = FALSE;
+  //  hostActive = FALSE; //MH logic moved to main loop with a timeout 1/24/12
   // Used in processHartCommand(), executeCommand()
   hartCommand = 0xfe;               // Make the command invalid
 
@@ -186,6 +196,7 @@ void initHartRxSm(void)
 
   // Signal the Hart Receiver State MAchine to do the rest
   bInitHartSm = TRUE;
+
 
 }
 
@@ -247,17 +258,21 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
     expectedByteCnt = calcLrc = rcvByteCount = rcvAddrCount = totalRcvByteCount = 0;
     preambleByteCount = 0;
     //pRespBuffer = szHartResp;     // Set the transmit pointer back to the beginning of the buffer
-    //  stop (if running) the Reply timer
-    stopReplyTimerEvent();
+    //  stop (if running) the Reply timer (made one shot on 12/26/12 )
+
     ePresentRcvState = eRcvSom;   // Set the state machine to look for the start of message
   }
   //  Process Received Character
   nextByte = data;            //  !MH:--> HART_RXBUF;
   statusReg = data >>8;       //  debugging HART_STAT;
-  kickHartRecTimers();        //  kick the Gap and Response timers, they will generate wake-up events to main loop
+  /*!
+   * If we are in sleep mode, kicking timers here may be late and a Gap timer may time-out
+   * Move this to ISR - RX
+   */
+  //kickHartRecTimers();        //  kick the Gap and Response timers, they will generate wake-up events to main loop
   //
   ++ErrReport[0];
-  hostActive = TRUE;      //  If we are receiving characters, the host is active
+  //  hostActive = TRUE;      //  If we are receiving characters, the host is active  ==MH 1/24/13  Logic moved to Mainloop in a complete message
   //
   // Check for errors before calling the state machine, since any comm error resets the state machine
   //
@@ -354,8 +369,11 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
       longAddressFlag = (nextByte & LONG_ADDR_MASK) ? TRUE : FALSE;
       // change the state
       ePresentRcvState = eRcvAddr;
+
       // Start Checking time between chars as a valid frame has started
+      bHartRecvFrameCompleted= FALSE;        // Clear the event blocking
       startGapTimerEvent();
+      SETB(TP_PORTOUT, TP1_MASK);           // Mark the init of HART frame as seen by module
 
     }
     else
@@ -450,9 +468,10 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
       ePresentRcvState = eRcvLrc;
     break;
   case eRcvLrc:
-    // We are using the single hartFrameRcvd flag for Gap/Reply
-    stopGapTimerEvent();      // extras are don't cares for hart command message
-    startReplyTimerEvent();   // Now we have enough data to send a Reply
+    bHartRecvFrameCompleted = TRUE; // ACK - Gap timer must be ignored
+
+    // 12/26/12 We couldn't move the start of Reply timer in ISR, we keep it Here, reply will have some latency
+    startReplyTimerEvent();
 
     if (calcLrc == nextByte)
     {
@@ -477,6 +496,7 @@ void hartReceiver(WORD data)   //===> BOOLEAN HartReceiverSm() Called every time
       initHartRxSm();
     break;
   case eRcvXtra:
+    //==TOGGLEB(TP_PORTOUT, TP2_MASK);    // Provisional see the xtra chars in scope
     HartErrRegister |= EXTRA_CHAR_RCVD;
     //#ifdef STORE_EXTRA_CHARS
     if (FALSE == checkCarrierDetect())
@@ -726,11 +746,15 @@ WORD sendHartFrame (void)
     clrPrimaryStatusBits(FD_STATUS_COLD_START);
   else
     clrSecondaryStatusBits(FD_STATUS_COLD_START);
-  //TODO: Need to investigate all this section in Hart
+
+  //  12/6/12 No commands to RESET Hart module are supported
+#if 0
   //  If cmdReset is set and we are here, we should not respond again until we emerge from the reset,
   //  so set the do not respondflag
   if (TRUE == cmdReset)
     doNotRespond = TRUE;
+#endif
+
   // Get ready for next frame
   // 10) prepareToRxFrame();
   initHartRxSm();

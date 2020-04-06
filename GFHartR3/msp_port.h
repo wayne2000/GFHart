@@ -56,37 +56,42 @@
 #define XOUT_MASK    0x20
 
 //  Hart Uart
-#define HART_UART_PORTSEL  P4SEL
-#define HART_UART_PORTDIR  P4DIR
-#define HART_UART_PORTDS   P4DS
-#define HART_UART_TX_MASK   0x10
-#define HART_UART_RX_MASK   0x20
+#define HART_UART_PORTSEL  P4SEL        /*!<  msp430 Hart port SEL */
+#define HART_UART_PORTDIR  P4DIR        /*!<  msp430 Hart port DIR */
+#define HART_UART_PORTDS   P4DS         /*!<  msp430 Hart port Drive strength DS */
+#define HART_UART_TX_MASK   0x10        /*!<  msp430 Hart port pin mask for TX */
+#define HART_UART_RX_MASK   0x20        /*!<  msp430 Hart port pin mask for RX */
 
 // HArt Uart Tx control (RTS) line HI= Driver disable
-#define HART_UART_TXCTRL_PORTOUT  P4OUT
-#define HART_UART_TXCTRL_PORTSEL  P4SEL
-#define HART_UART_TXCTRL_PORTDIR  P4DIR
-#define HART_UART_TXCTRL_MASK   0x01
+#define HART_UART_TXCTRL_PORTOUT  P4OUT /*!<  Hart msp430 TX driver port OUT */
+#define HART_UART_TXCTRL_PORTSEL  P4SEL /*!<  Hart msp430 TX driver port SEL */
+#define HART_UART_TXCTRL_PORTDIR  P4DIR /*!<  Hart msp430 TX driver port DIR */
+#define HART_UART_TXCTRL_MASK   0x01    /*!<  Hart msp430 TX driver pin port MASK */
+#define HART_UART_TXCTRL_PORTDS  P4DS   /*!<  Hart msp430 RTS Hi Drive Strength */
 
 
 //  High Speed Bus uses TA0
-#define HSB_SLOT_TIMER_TR       TA0R        /* Counter Value */
-#define HSB_SLOT_TIMER_CTL      TA0CTL      /* Setup Register */
-#define HSB_SLOT_TIMER_CCR      TA0CCR0     /* Compare register for Hsb slot time */
-#define HSB_SLOT_TIMER_CCTL     TA0CCTL0    /* Control register for Hsb slot */
+#define HSB_ATTENTION_TIMER_TR       TA0R        /*!< Hsb slot counter Value */
+#define HSB_ATTENTION_TIMER_CTL      TA0CTL      /*!< Hsb slot Setup Register */
+#define HSB_ATTENTION_TIMER_CCR      TA0CCR0     /*!< Compare register CCR0 for Hsb slot time */
+#define HSB_ATTENTION_TIMER_CCTL     TA0CCTL0    /*!< CCTL0 control register for Hsb slot module */
+
+//  Use the CCR1 module of TA0 to reduce the WRITE TO FLASH opportunity
+#define HSB_ATTENTION_TIMER_FLASH_WR_DISABLE_CCR  TA0CCR1     /*!< Time to end the Hsb flash write slot */
+#define HSB_ATTENTION_TIMER_FLASH_WR_DISABLE_CCTL TA0CCTL1    /*!< Control for the capture module of Hsb Flash wr slot */
 
 //	Hart Receiver Dog timers
 //	Reception GAP between chars uses TA1
-#define HART_RCV_GAP_TIMER_TR					TA1R				/* Count Value */
-#define HART_RCV_GAP_TIMER_CTL				TA1CTL			/* Setup Register */
-#define HART_RCV_GAP_TIMER_CCR				TA1CCR0			/* Compare register for GAP	time */
-#define HART_RCV_GAP_TIMER_CCTL				TA1CCTL0		/* Control register for GAP	*/
+#define HART_RCV_GAP_TIMER_TR					TA1R				/*!< Hart Gap timer count Value */
+#define HART_RCV_GAP_TIMER_CTL				TA1CTL			/*!< Hart gap timer Setup Register */
+#define HART_RCV_GAP_TIMER_CCR				TA1CCR0			/*!< Hart compare register CCR0 for GAP	time */
+#define HART_RCV_GAP_TIMER_CCTL				TA1CCTL0		/*!< CCTL0 control register for GAP	module */
 
 //	Slave Reply uses TA2
-#define HART_RCV_REPLY_TIMER_TR				TA2R				/* Count Value */
-#define HART_RCV_REPLY_TIMER_CTL			TA2CTL			/* Setup Register */
-#define HART_RCV_REPLY_TIMER_CCR			TA2CCR0			/* Compare register for GAP	time */
-#define HART_RCV_REPLY_TIMER_CCTL			TA2CCTL0		/* Control register for GAP	*/
+#define HART_RCV_REPLY_TIMER_TR				TA2R				/*!< Hart Reply timer Count Value */
+#define HART_RCV_REPLY_TIMER_CTL			TA2CTL			/*!< Hart Reply timer Setup Register */
+#define HART_RCV_REPLY_TIMER_CCR			TA2CCR0			/*!< Hart reply timer Compare register CCR0  */
+#define HART_RCV_REPLY_TIMER_CCTL			TA2CCTL0		/*!< Hart reply timer CCTL0 Control register	*/
 
 // Definitions from msp430x.h not found in CCS
 #define P1OUT_              (0x0202u)  /* Port 1 Output */
@@ -98,7 +103,12 @@
 
 
 
-// Hardware abstraction for the Hart MOdule
+/*!
+ *  Used to set/reset/test pin in a port using inlines
+ *  Dropped caus generated non-atomic functions
+ *
+ *
+ */
 typedef struct
 {
   int8u *port;

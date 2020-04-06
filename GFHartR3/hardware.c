@@ -1,6 +1,8 @@
 /*!
  *  \file   hardware.c
  *  \brief  Provides the hardware interface for GF Hart implementation
+ *
+ *
  *  Created on: Sep 28, 2012
  *  \author: MH
  */
@@ -26,6 +28,9 @@ static void toggleRtsLine();
 //  GLOBAL DATA
 //==============================================================================
 volatile WORD SistemTick125mS=0;
+unsigned char currentMsgSent = NO_CURRENT_MESSAGE_SENT;
+volatile BOOLEAN bHartRecvFrameCompleted = FALSE;
+
 //  volatile WORD flashWriteTimer =0;   // Original timer was 4000 mS, local var
 //==============================================================================
 //  LOCAL DATA
@@ -37,7 +42,7 @@ volatile WORD SistemTick125mS=0;
 
 
 /*!
- * \function  INIT_SVS_supervisor()
+ * \fn  INIT_SVS_supervisor()
  *
  *  \brief    Enables supply voltage supervision and monitoring
  *
@@ -54,7 +59,7 @@ void INIT_SVS_supervisor(void)
 
 
 /*!
- * \function  INIT_set_Vcore
+ * \fn  INIT_set_Vcore
  *
  * \brief     Set The VCore Voltage
  * \param     Vcore Level
@@ -89,7 +94,7 @@ void INIT_set_Vcore (unsigned char level)
 }
 
 /*!
- * \function checkClock
+ * \fn checkClock
  * Checks and clear any oscillator fault
  * Periodically (100 to 500 mS) call this routine to assure XT1 oscillator is ON
  * JY
@@ -104,64 +109,100 @@ void checkClock(void)
 }
 
 /*!
- * \function  initClock(void)
- * \brief     Set clocks MCLK & SMCLK - DCO 1.048576MHz FLL:XT1, ACLK -XT1 xtal 32.768KHz
+ * \fn  initClock(void)
+ * \brief     Set clocks MCLK & SMCLK - DCO 1.048576MHz enable FLL:XT1,
+ *            ACLK -XT1 xtal 32.768KHz
  *
- * Main clock MCLK source is DCO, maximum permissible 1.048MHz (Low power)
- * DCO stabilized by FLL (as default) using XT1 as the reference clock.
- * ACLK source is XT1 and connected to external 32.768KHz crystal (TBD Evaluate LPM0, and if necessary ACLK->LPM3)
- * SMCLK will be used for Uarts and system timers
- * Note:    It takes 775mS to Stabilize
+ * Main clock MCLK source is DCO, maximum permissible freq is 1.048MHz for Low power
+ * DCO stabilized by FLL (as default) but using XT1 as the reference clock.
+ * SMCLK will be used for HSB Uart, ACLK for Hart Uart and system timers
+ *
+ * 12/11/12
+ * - FLL is enabled at Power up. After XT1 starts up, we disable FLL and leave DCO without compensation
+ *    (this is a temp solution since our Hart HW has silicon rev. E with the UCS10 errata)
+ * - Future designs expect silicon rev F/G/H+ without FLL -clock jump problem
+ *
  * \author  MH 9/29/12
  */
 void initClock(void)
 {
 
-  // X2 should be off after POR - Turn it off if we came from a Soft-reset
+    // X2 should be off after POR - Turn it off if we came from a Soft-reset
   UCSCTL6 |= XT2OFF;          // Set XT2 Off
-  //  XT1 Clock pins
+  //  Enable XT1 Clock pins
   XT1_PORTREN &= ~(XIN_MASK | XOUT_MASK);   // remove resistors (if any) from Xtal pins
   XT1_PORTDIR |= XOUT_MASK;                 // XOUT as output (JY)
   XT1_PORTOUT |= XOUT_MASK;                 // XOUT high      (JY lowest drive?)
-  XT1_PORTSEL |= XIN_MASK | XOUT_MASK;      // Xtal function, this enables XT1 oscillator but uses REFO here
-  UCSCTL6 =  ~(XCAP0_L | XCAP1_L) & UCSCTL6 | XCAP_2;     // Clear default XCAP_3 and set Cap = (10.5 + 2)pF
+  XT1_PORTSEL |= XIN_MASK | XOUT_MASK;      // Xtal function, this enables XT1 oscillator but uses REFO until XT1 stabilizes
+
+  //  Values from TI examples are the defaults after a POR- MH 11/19/12
+  //  XT2DRIVE=3, X2TOFF=1, XT1DRIVE=3, XTS=0, XT1BYPASS=0, SMCLKOFF=0, XCAP=3 (12pF), XT1OFF=1
+  //  Use no internal caps as this board has external 22pF - Recommend CL external value should be 12pF each
+  UCSCTL6 &=  ~(XCAP0_L | XCAP1_L | XT1OFF);  // Clear defaults XCAP_3 and XT1OFF
+  //  ==> set the internal Caps as necessary UCSCTL6 |= XCAP_x
   //
-  //
-  //  Setup DCO and FLL
-  //  DCOCLK = (32768/1 ) * ( 1 * (31+1)) = 1,048,576 Hz
-  UCSCTL2 = FLLD__1 |       //  FLLD=0  divide-feedback-by-1
-            0x001F;         //  FLLN=31 divide feedback by 31+1
+  //  Setup DCO frequency by the FLL frequency multiplier FLLN and loop divider FLLD
+  //  After stabilization: DCOCLK = (32768/1 ) * ( 1 * (31+1)) = 1,048,576 Hz
+  //  UCSCTL2 = FLLD__1 |       //  FLLD=0  divide-feedback-by-1 ?? default is 1 and still div-by-1
+  //            0x001F;         //  FLLN=31 divide feedback by 31+1
+  //  ===> UCSCTL2 = 0x101F is the default as TI example: 0x101F -MH 11/19/12
+
+  //  Set FLL clock reference and its divider FLLREFDIV
   UCSCTL3 = SELREF_0  |     //  SELREF = 0  FLL reference is XT1 = 32768 Hz, XT1 should start from here
             FLLREFDIV__1;   //  FLLREFDIV=0 FLL reference div-by-1
 
-  // Select the clocks
-  UCSCTL4 |=  SELA_0 |      //  ACLK  = XT1CLK  =   32.768Khz external crystal
-              SELS_4 |      //  SMCLK = DCOCLKDIV=  1,048,576
-              SELM_4;       //  MCLK  = DCOCLKDIV=  1,048,576
+  // Select the system clocks (same as TI example, default 0x0044) as Some favor DCOCLKDIV over DCOCLK (less jitter)
+  //  ACLK = XT1CLK, SMCLK = DCOCLKDIV, MCLK  = DCOCLKDIV
+  UCSCTL4 =   SELA_0 |      //  ACLK  = XT1CLK  =   32.768Khz external crystal
+              SELS_4 |      //  SMCLK = DCOCLKDIV=  1,048,576   as TI Example (default) MH -11/19/12
+              SELM_4;       //  MCLK  = DCOCLKDIV=  1,048,576   as TI Example (default) MH -11/19/12
 
-  // Set clocks Dividers DIVPA = DIVA = DIVS = DIVM = 1
+  // Set clocks Dividers DIVPA = DIVA = DIVS = DIVM = 1 (these are Defaults and same as TI example)
   UCSCTL5 = DIVPA_0 |       //  ACLKpin = ACLK /1
             DIVA_0  |       //  ACLK /1
             DIVS_0  |       //  SMCLK /1
             DIVM_0;         //  MCLK /1
 
-  // Loop until XT1 & DCO stabilizes. Clear faults generated by FLL clk switching from REFO to XT1
-  //!DEBUG: Time to stabilize ACLK and DCO = Typ 550mS, 750mS Max
-  SETB(TP_PORTOUT, TP1_MASK);  P1DIR |=TP1_MASK; // TP1 indicates time to stabilize XT1 & DCO
+  //  Loop until XT1 & DCO stabilize.
+  //  Clearing fault generated by XT1 allows the FLL to switch from REFO to XT1 again, until XT1 exceeds fault level
+  //  We stay in this loop for ~800mS, (maximum startup time is 500mS: 3V, 32Khz,XTS=0,XT1DRIVE=3,CLeff=12pF).
+  //  After clearing OFIFG fault, we wait 10mS before testing the bit
+  //
+  WORD u=0;
   do
   {
-    UCSCTL7 &= ~(XT2OFFG | XT1LFOFFG | DCOFFG); // Clear XT2,XT1,DCO fault flags
-    SFRIFG1 &= ~OFIFG;                          // Clear fault flags
-  } while (SFRIFG1&OFIFG);                      // Test oscillator fault flag
-  //!DEBUG:
-  CLEARB(TP_PORTOUT, TP1_MASK);  // TP1 On duration indicates XT1&DCO stabilization
-  _no_operation();          //  Debug point: DO any change here
+    UCSCTL7 &= ~(XT1LFOFFG | DCOFFG);       //  Clear XT1 and DCO fault flags
+    SFRIFG1 &= ~OFIFG;                      //  Clear fault flags
+    __delay_cycles(10000);                  //  10mS @1Mhz - this is a delay before asking for Flasg status
+  } while (u++ < 80 || (SFRIFG1&OFIFG) );   //  Force to test oscillator fault flag for at least 800mS
+  //
+#ifdef MONITOR_ACLK
+  // Monitor Clocks: ACLK --> P1.0
+  P1DIR |= BIT0;
+  P1SEL |= BIT0;  //P1.0 is ACLK    32.768KHz
+  _no_operation();                          //  Debug point: DCO calibrated close to 32*32768 ~ 1.048MHz and FLL OFF
+#endif
+#ifdef MONITOR_SMCLK
+  // Monitor Clocks: SMCLK --> P2.2
+  P2DIR |= BIT2;
+  P2SEL |= BIT2;  //P2.2 is SMCLK   1.048MHz
+  _no_operation();                          //  Debug point: DCO calibrated close to 32*32768 ~ 1.048MHz and FLL OFF
+#endif
   //
   //    Done with system clock settings
+  //    TEMPORARY code: Turn OFF FLL.
+  // FINALLY Enable FLL  __bis_SR_register(SCG0);                  // Disable the FLL control loop === Will be applied during the Idle Slot ===
+  //  12/06/12  FLL will be always ON - unless evaluation of Rev. F shows a lot improvement
+  //
+  _no_operation();
+  _no_operation();
+  _no_operation();                          //  Debug point: DCO calibrated close to 32*32768 ~ 1.048MHz and FLL OFF
+
+
 }
 
 /*!
- * 	\function  initTimers()
+ * 	\fn  initTimers()
  * 	Configure the msp430 timers as follows:
  * 	- System timer: TB, TBCLK = ACLK/8 = 4096Hz, 8 ticks/sec,
  * 	- HSB slot timeout, up, ACLK/8 = 4096Hz
@@ -194,23 +235,20 @@ initTimers()
   HART_RCV_REPLY_TIMER_CCR = 	REPLY_TIMER_PRESET;// CCR0
   HART_RCV_REPLY_TIMER_CCTL =	CCIE;							// Enable CCR0 interrupt
 
-#if 0
 
-  // Timer A0 = HSB slot time-out
-  HSB_SLOT_TIMER_CCTL  =      TASSEL_1  |       // Clock Source = ACLK
-                              ID_3 |            // /8
-                              TACLR;            // Clear
-  HSB_SLOT_TIMER_CCR  =       1;                // non-zero to avoid an interrupt (will be set properly at start)
-  HSB_SLOT_TIMER_CCTL =       CCIE;             // Enable interrupt
-#endif
-
+  // Timer A0 = HSB Attention timer: Enables the RXIE to get the starting command
+  HSB_ATTENTION_TIMER_CTL  =        TASSEL_1  |       // Clock Source = ACLK
+                                    ID_3 |            // /8
+                                    TACLR;            // Clear
+  HSB_ATTENTION_TIMER_CCR  =       HSB_ATTENTION_CCR_PRESET;
+  HSB_ATTENTION_TIMER_CCTL =       CCIE;             // Enable interrupt
 
 }
 
 
 
 /*
- * \function    initHardware
+ * \fn    initHardware
  * Initializes clock system, set GPIOs, init USB power, set Hart in Rx mode, init uC Uarts and timers
  *
  */
@@ -218,8 +256,27 @@ void initHardware(void)
 {
 
   stopWatchdog();
+  /////////////////////////////////////////////////////////////////////////////
+  //  2/5/13  === RTS on Modem A5191 side should be High during Reset
+  // Hart Transmit control
+  HART_UART_TXCTRL_PORTSEL &= ~HART_UART_TXCTRL_MASK;    // Make sure pin is GPIO out
+  HART_UART_TXCTRL_PORTDIR |= HART_UART_TXCTRL_MASK;
+  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;    // app disableHartTxDriver();   // Put Modem Line in listen mode
+  //
+  /////////////////////////////////////////////////////////////////////////////
+  //  Increase RTS Drive strength  2/4/13 !MH
+  HART_UART_TXCTRL_PORTDS |= HART_UART_TXCTRL_MASK;
+  //
+  toggleRtsLine();
+  //
+  /////////////////////////////////////////////////////////////////////////////
+
+  // Change clock initialization earlier
+  initClock();
+
   //
   // Set up GPIO test pins
+  P1OUT &= ~0xF0;  // We are using TPS to trigger data logging
   TP_PORTDIR = (TP1_MASK | TP2_MASK | TP3_MASK | TP4_MASK); // Test Points as Outputs
   //
   //!MH These original configurations looks like we can have a soft-reset
@@ -229,10 +286,6 @@ void initHardware(void)
   P1IES &= ~(BIT2|BIT3);  // lo->hi transition (for now)
   P1IFG &= ~(BIT2|BIT3);  // clear IFG in case it's set
 
-  // Hart Transmit control
-  HART_UART_TXCTRL_PORTSEL &= ~HART_UART_TXCTRL_MASK;    // Make sure pin is GPIO out
-  HART_UART_TXCTRL_PORTDIR |= HART_UART_TXCTRL_MASK;
-  HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;    // app disableHartTxDriver();   // Put Modem Line in listen mode
 
   // Hart Uart Pins
   HART_UART_PORTSEL |= HART_UART_RX_MASK | HART_UART_TX_MASK;
@@ -241,15 +294,12 @@ void initHardware(void)
 
   // initialize the clock system
   initClock();
-  // Monitor Clocks: ACLK --> P1.0, SMCLK --> P2.2
-  P1DIR |= BIT0;
-  P1SEL |= BIT0;  //P1.0 is ACLK    32.768KHz
-  P2DIR |= BIT2;
-  P2SEL |= BIT2;  //P2.2 is SMCLK   1.048MHz
 
   _disable_interrupts(); //vj  make sure all irq are disable
   //  Pulse TxRxHart line to Tx mode two times and leave it in Rx Mode
   toggleRtsLine();
+  // Added the following function:
+  stopWatchdog();
 
   // Disable VUSB LDO and SLDO
   USBKEYPID   =     0x9628;           // set USB KEYandPID to 0x9628: access to USB config registers enabled
@@ -271,117 +321,140 @@ void initHardware(void)
   //USE_PMM_CODE
   INIT_SVS_supervisor();
 
+  /// Here we go, Enable watchdog()
+  startWatchdog();
+
 }
 
 /*!
- * \function    toggleRtsLine
+ * \fn    toggleRtsLine
  * Toggle TxRx Hart line to have extern FF in a defined state and levae it at Receiver mode
  *
  *  This function assures that the TxRx will always be on RxMode, by toggling the TxRx line
  *  into TxMode two times 140uS ea. It uses software delay with clock at 1.048Mhz
+ *
+ *  !MH == 2/4/13  The 140uS is marginal for the hardware AC-coupling:  R8=499 Ohms, C7=0.033uS
+ *  4*T*=  67us, Rise + Fall + 2 Level *1.1 margin =
+ *    Pulse width at least 300uS
+ *  Optocoupler also contributes with 7.5*2uS = 15uS
+ *    Patch will provide double= 500uS pulse delay
+ *  2/5/13== only a single positive transition is necessary
+ *
  * \param   none
  * \return  none
  *
  *
  */
-static void toggleRtsLine()
+void toggleRtsLine()
 {
-  // variables needed for the RTS initialization sequence
-  unsigned int idleCount = 0;
-  unsigned int idleCount_1 = 0;
-  unsigned int rts_init = 0;
-  unsigned int second_round = 0;
 
-  while(idleCount < 0x2ff) //0x9ff) //0x27ff) //0x9fff)
+  volatile int i;
+  _no_operation();
+  for(i=0; i< 1; ++i)   // 2/5/13 Only One positve transition is necessary
   {
-      ++idleCount;
-      resetWatchdog();
-  }
-  // Toggle RTS a few times
-  idleCount=0;
-  while(!rts_init)
-  {
-    if (idleCount > 0xf)
-    {
-        disableHartTxDriver();
-        ++idleCount_1;
-    }
-    else
-    {
-        ++idleCount;
-        enableHartTxDriver();
-    }
-    if (idleCount_1 > 0xf)
-    {
-        idleCount_1 = 0;
-        idleCount = 0;
-        if (second_round == 1)
-        {
-            rts_init = 1;
-        }
-        second_round = 1;
-    }
+    disableHartTxDriver();
+    _delay_cycles(500);
+    enableHartTxDriver();
+    _delay_cycles(500);
+    kickWatchdog();
   }
   disableHartTxDriver(); // make sure rts is in receive mode
-  idleCount =0;
+  //
+  //
   P1IFG &= ~(BIT2|BIT3); // clear the DCD flags just in case they've been set
-  while(idleCount < 0x2ff) //0x9ff) //0xfff)
-  {
-      ++idleCount;
-      resetWatchdog();
-  }
 }
 
 /*!
- * Timer B0 interrupt service routine
+ * Timer B0 interrupt service routine for CCR0
+ * TB0 TB0CCR0 59
  *
  */
-#pragma vector=TIMERB0_VECTOR
-__interrupt void TIMERB1_ISR(void)
+#pragma vector=TIMER0_B0_VECTOR
+__interrupt void _hart_TIMER0_B0_VECTOR(void)
 {
   _no_operation();
   ++SistemTick125mS;
   SET_SYSTEM_EVENT(evTimerTick);
-  //TOGGLEB(TP_PORTOUT, TP1_MASK);            // Toggle TP1
-  _low_power_mode_off_on_exit();
+#ifdef LOW_POWERMODE_ENABLED
+  _bic_SR_register_on_exit(LPM_BITS);
+  _no_operation();    //
+  _no_operation();
+  _no_operation();
+#endif
 }
 
 
 /*!
- * Timer A0 interrupt service routine for CC0
+ * Timer A0 interrupt service routine for CC0 TIMER0_A0_VECTOR (53)
  * HSB Slot Timer - Active (50mS) and Idle (100mS)
  *
  */
 #pragma vector=TIMER0_A0_VECTOR
-__interrupt void hsbSlotTimerISR(void)
+__interrupt void hsbAttentionTimerISR(void)
 {
-  SET_SYSTEM_EVENT(evHsbSlotTimeout);
+  //TOGGLEB(TP_PORTOUT, TP2_MASK);     // Mark the Enable POINT
+  hsbUart.hRxInter.enable();
+  stopHsbAttentionTimer(); // Stop This event   (corrected typo error)
+  hsbActivitySlot = TRUE;  // We are preparing for RX, DO NOT WRITE NOW ON, DO NOT FALL TO SLEEP
+
+  // This is the best time to clear the HSB === 12/28/12
+  BYTE rxbyte = UCA0RXBUF;                     // read & clears the RX interrupt flag and UCRXERR status flag
+
   //while(1); // Trap
-  _low_power_mode_off_on_exit();
+#ifdef LOW_POWERMODE_ENABLED
+  _bic_SR_register_on_exit(LPM_BITS);
+  _no_operation();    //
+  _no_operation();
+  _no_operation();
+#endif
 }
 
 /*!
- * Timer A1	interrupt service routine for CC0
+ * Timer A1	interrupt service routine for CC0, TA1CCR0 (49)
  * Hart Inter-character GAP expired
+ * 12/26/12 the gap timer is one shot
  *
  */
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void gapTimerISR(void)
 {
-	SET_SYSTEM_EVENT(evHartRcvGapTimeout);
-	//while(1);	// Trap
-	_low_power_mode_off_on_exit();
+  //SETB(TP_PORTOUT, TP3_MASK);             // Indicate an Gap Error and leave pin there
+  if(!bHartRecvFrameCompleted)              // We time-out but hartReceiver() has ACK and waiting to Reply
+    SET_SYSTEM_EVENT(evHartRcvGapTimeout);
+
+	// Stop the timer (Only one shot)
+	HART_RCV_GAP_TIMER_CTL  &= ~MC_3;     // This makes MC_0 = stop counting
+	HART_RCV_GAP_TIMER_CTL  |= TACLR;     // Clear TAR
+
+	// while(1);	// TRAP HART PROBLEM == Didn't get Gap Error => Looking for STACK
+#ifdef LOW_POWERMODE_ENABLED
+	_bic_SR_register_on_exit(LPM_BITS);
+	_no_operation();    //
+	_no_operation();
+	_no_operation();
+#endif
 }
+
 /*!
- * Timer A2	interrupt service routine for CC0
- * Hart slave response time
+ * Timer A2	interrupt service routine for CC0, TA2CCR0 (44)
+ * Hart slave response time, we also stop the timer here to
+ * have a ONE shot timer. Main loop doesn't need to control timer
  *
  */
 #pragma vector=TIMER2_A0_VECTOR
 __interrupt void slaveReplyTimerISR(void)
 {
 	SET_SYSTEM_EVENT(evHartRcvReplyTimer);
-	_low_power_mode_off_on_exit();
+	//  12/26/12 Stop timer from an ISR
+	HART_RCV_REPLY_TIMER_CTL  &= ~MC_3;     // This makes MC_0 = stop counting
+	HART_RCV_REPLY_TIMER_CTL  |= TACLR;     // Clear the counting register TAR
+
+
+#ifdef LOW_POWERMODE_ENABLED
+	_bic_SR_register_on_exit(LPM_BITS);
+	_no_operation();    //
+	_no_operation();
+	_no_operation();
+#endif
 	//while(1);	// Trap
 }
-

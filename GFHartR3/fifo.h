@@ -1,8 +1,9 @@
-/*
- * fifo.h
+/*!
+ * \file    fifo.h
+ *  \brief  Provides basic FIFO operations for both byte and word fifos
  *
  *  Created on: Oct 1, 2012
- *      Author: marco
+ *      Author: MH
  */
 
 #ifndef FIFO_H_

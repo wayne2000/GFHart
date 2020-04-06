@@ -1,7 +1,7 @@
 /*!
- *  \file   main9900r3.c
+ *  \file   main9900_r3.c
  *  \brief  Command for handling the High Speed serial Bus to 9900
- *  Recoded on: Nov 6, 2012
+ *  Recoded on: Nov 9, 2012
  *  \author: MH
  *
  *  Revision History:
@@ -11,152 +11,127 @@
  *
  */
 
-//=======================
+///////////////////////////////////////////////////////////////////////////////////////////
 // INCLUDES
-//=======================
+///////////////////////////////////////////////////////////////////////////////////////////
 #include <msp430f5528.h>
 #include <string.h>
 #include "hardware.h"
-#include "hartr3.h"
-#include "main9900r3.h"
-#include "common_h_cmdr3.h"
-
-//========================
+#include "hart_r3.h"
+#include "main9900_r3.h"
+#include "driverUart.h"
+#include "protocols.h"
+///////////////////////////////////////////////////////////////////////////////////////////
 //  LOCAL DEFINES
-//========================
+///////////////////////////////////////////////////////////////////////////////////////////
 
-// HART --> 9900 Response Requests
-#define RESP_REQ_NO_REQ         '0'
-#define RESP_REQ_SAVE_AND_RESTART_LOOP  '1'
-#define RESP_REQ_CHANGE_4MA_POINT   '2'
-#define RESP_REQ_CHANGE_20MA_POINT    '3'
-#define RESP_REQ_CHANGE_4MA_ADJ     '4'
-#define RESP_REQ_CHANGE_20MA_ADJ    '5'
-#define RESP_REQ_CHANGE_SET_FIXED   '6'
-#define RESP_REQ_CHANGE_RESUME_NO_SAVE  '7'
-
-#define POLL_LAST_REQ_BAD '0'
-#define POLL_LAST_REQ_GOOD  '1'
-#define POLL_LAST_REQ_GOOD_BUT_INCOMPLETE '2'
-
-// HART UPDATE message
-
-// Variable Status 9900 --> HART
-#define UPDATE_STATUS_GOOD            '0'
-#define UPDATE_STATUS_WRONG_SENSOR_FOR_TYPE   '1'
-#define UPDATE_STATUS_CHECK_SENSOR_BAD_VALUE  '2'
-#define UPDATE_STATUS_SENSOR_NOT_PRESENT    '3'
-#define UPDATE_STATUS_SENSOR_UNDEFINED      '4'
-#define UPDATE_STATUS_INIT            'F'
-
-
-
-//================================
+///////////////////////////////////////////////////////////////////////////////////////////
 //  LOCAL PROTOTYPES.
-//================================
-//========================
-//  GLOBAL DATA
-//========================
-U_DATABASE_9900 u9900Database;            // 9900 Database
-BOOLEAN hostActive = FALSE;               // Do we have a host actively communicating?
-int32u num9900MessagesErrored=0;
-int32u num9900MessagesRcvd =0;
-BOOLEAN mainMsgReadyToProcess = FALSE;
-BOOLEAN databaseOk = FALSE;               // database loaded OK flag
-BOOLEAN setToMinValue = FALSE;            // Trim command flags
-BOOLEAN setToMaxValue = FALSE;
-BOOLEAN updateMsgRcvd = FALSE;            // A flag that indicates that an update message has been received from the 9900
-BOOLEAN updateDelay = FALSE;              // If the update is delayed, set this flag
-int8u loopMode = LOOP_OPERATIONAL;        // Loop mode is either operational, fixed 4, or fixed 20
-BOOLEAN updateInProgress = FALSE;         // flags to make sure that the loop value does not get reported if an update is in progress
-BOOLEAN updateRequestSent = FALSE;
-int8u PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;   // Device Variable Status for PV. initialize to BAD, constant
-BOOLEAN comm9900started = FALSE;          // Flag and counter to make sure the 9900 has communicated
+///////////////////////////////////////////////////////////////////////////////////////////
 
-BYTE sz9900CmdBuffer [MAX_9900_CMD_SIZE];    // Buffer for the commands from the 9900
-//
-//========================
+///////////////////////////////////////////////////////////////////////////////////////////
+//  GLOBAL DATA
+///////////////////////////////////////////////////////////////////////////////////////////
+
+U_DATABASE_9900 u9900Database;          //!< 9900 Database
+BOOLEAN hostActive = FALSE;             //!< Flag indicating that we have a host actively communicating
+BOOLEAN comm9900started = FALSE;
+
+BOOLEAN updateMsgRcvd = FALSE;      //!< Flag indicating an update message has been received from the 9900 and HART communications can begin
+BOOLEAN databaseOk  = FALSE;        //!< Database loaded OK flag
+
+///////////////////////////////////////////////////////////////////////////////////////////
 //  LOCAL DATA
-//========================
+///////////////////////////////////////////////////////////////////////////////////////////
+// Diagnostics
+unsigned long numMessagesRcvd = 0;
+unsigned long numMessagesErrored = 0;
+
+// Is the host in an comm error condition?
+int hostError = FALSE;
+
+// flags for determining status
+// The most recent comm status from the 9900
+int8u lastCommStatus = POLL_LAST_REQ_GOOD;
+// the most recent variable status from the 9900
+int8u lastVarStatus = UPDATE_STATUS_INIT;
+int8u varStatus = UPDATE_STATUS_GOOD;
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// FUNCTIONS
+///////////////////////////////////////////////////////////////////////////////////////////
+
+// RE-ARRANGING CODE BELLOW
+
+
+// Buffer for the commands from the 9900
+unsigned char sz9900CmdBuffer [MAX_9900_CMD_SIZE];
+// Buffer for the response to the 9900
+unsigned char sz9900RespBuffer [MAX_9900_RESP_SIZE];
+// the size of the response
+volatile unsigned int responseSize = 0;       // This is a critical variable 12/21/12
+
+// Transmitted character counter
+unsigned int numMainXmitChars = 0;
+// If the update is delayed, set this flag
+int8u updateDelay = FALSE;
+// A request is made by the HART master
+int8u request = RESP_REQ_SAVE_AND_RESTART_LOOP;
+// There is usually a value for a request
+float requestValue = 0.0;
+float rangeRequestUpper = 0.0;
+// Loop mode is either operational, fixed 4, or fixed 20
+int8u loopMode = LOOP_OPERATIONAL;
+// We have to queue requests for responses 1 and 3 
+int8u queueResp1 = FALSE;
+int8u queueResp3 = FALSE;
+// If we go to constant current mode, we need to see whether a save
+// is required when the loop goes operational again
+int8u saveRequested = FALSE;
+// flags to make sure that the loop value does not
+// get reported if an update is in progress
+unsigned char updateInProgress = FALSE;
+unsigned char updateRequestSent = FALSE;
+// Trim command flags
+unsigned char setToMinValue = FALSE;
+unsigned char setToMaxValue = FALSE;
+// Transmit flag. Set when transmit is active. Used to insure that the 
+// transmit & rcv ISRs don't run simultaneously
+unsigned char transmitMode = FALSE;
+// Add a counter to remind the 9900 of the current mode every (actually) 20 update messages
+//  MH - changed to unsigned int 1/24/13
+unsigned int modeUpdateCount = 0;
+// Device Variable Status for PV. initialize to BAD, constant
+unsigned char PVvariableStatus = VAR_STATUS_BAD | LIM_STATUS_CONST;
+// The timer for signaling HART is update messages don't occur
+unsigned long UpdateMsgTimeout = 0;
+
+// local prototype
+void killMainTransmit(void);
+
 // 9900 Factory database
 const DATABASE_9900 factory9900db =
 {
-  62,           // DB Length
-  "4640500111", // serial number
-  "3-9900-1X ", // Model string
-  "10-04a",     // SW REV
-  0.0,          // LOOP_SET_LOW_LIMIT
-  15.0,         // LOOP_SET_HIGH_LIMIT
-  0.0,          // LOOP_SETPOINT_4MA
-  14.0,         // LOOP_SETPOINT_20MA
-  4.0,          // LOOP_ADJ_4MA
-  20.0,         // LOOP_ADJ_20MA
-  1,            // LOOP_ERROR_VAL
-  0,            // LOOP_MODE;
-  2,            // MEASUREMENT_TYPE;
-  'A',          // GF9900_MS_PARAMETER_REVISION;
-  'Q',          // Hart_Dev_Var_Class;
-  0x3b,         // UnitsPrimaryVar;
-  0x20,         // UnitsSecondaryVar;
-  0,            // Pad;  // Just to be even
-  0x0972        // checksum;
+	62,		// DB Length
+	"4640500111",	// serial number
+	"3-9900-1X ",	// Model string
+	"10-04a",	// SW REV
+	0.0,		// LOOP_SET_LOW_LIMIT
+	15.0,		// LOOP_SET_HIGH_LIMIT
+	0.0,		// LOOP_SETPOINT_4MA
+	14.0,		// LOOP_SETPOINT_20MA
+	4.0,		// LOOP_ADJ_4MA
+	20.0,		// LOOP_ADJ_20MA
+	1,	// LOOP_ERROR_VAL
+	0,	// LOOP_MODE;
+	2,	// MEASUREMENT_TYPE;
+	'A',	// GF9900_MS_PARAMETER_REVISION;
+	'Q',	// Hart_Dev_Var_Class;
+	0x3b,	// UnitsPrimaryVar;
+	0x20,	// UnitsSecondaryVar;
+	0,	// Pad;  // Just to be even
+	0x0972	// checksum;
 };
-
-// flags for determining status
-
-static BOOLEAN hostError = FALSE;                   // Is the host in an comm error condition?
-static int8u lastCommStatus = POLL_LAST_REQ_GOOD;   // The most recent comm status from the 9900
-static int8u lastVarStatus = UPDATE_STATUS_INIT;    // the most recent variable status from the 9900
-static int8u varStatus = UPDATE_STATUS_GOOD;
-static BYTE sz9900RespBuffer [MAX_9900_RESP_SIZE];  // Buffer for the response to the 9900
-static int16u responseSize = 0;                     // the size of the response
-static int16u numMainXmitChars = 0;                 // Transmitted character counter
-static BOOLEAN mainMsgInProgress = FALSE;
-static int mainMsgCharactersReceived = 0;
-static int8u request = RESP_REQ_SAVE_AND_RESTART_LOOP;   // A request is made by the HART master
-static float requestValue = 0.0;                  // There is usually a value for a request
-static float rangeRequestUpper = 0.0;
-static BOOLEAN queueResp1 = FALSE;                // We have to queue requests for responses 1 and 3
-static BOOLEAN queueResp3 = FALSE;
-static BOOLEAN saveRequested = FALSE;             // If we go to constant current mode, we need to see whether a save
-static BOOLEAN transmitMode = FALSE;              // Transmit flag. Set when transmit is active. Used to insure that the transmit & rcv
-                                                  // ISRs don't run simultaneously is required when the loop goes operational again
-static int8u modeUpdateCount = 0;                 // Add a counter to remind the 9900 of the current mode every 256 update messages
-static int32u UpdateMsgTimeout = 0;   // The timer for signaling HART is update messages don't occur
-
-//
-//==============================================================================
-// FUNCTIONS
-//==============================================================================
-
-
-
-BOOLEAN checkCurrentMode = FALSE;
-int16u comm9900counter = 0;
-int8u currentMsgSent = NO_CURRENT_MESSAGE_SENT;
-
-// TODO:  Want to successfully compile
-void enableMainTxIntr()
-{
-  _no_operation();
-
-}
-void disableMainTxIntr()
-{
-  _no_operation();
-
-}
-void enableMainRcvIntr()
-{
-  _no_operation();
-
-}
-void disableMainRcvIntr()
-{
-  _no_operation();
-
-}
-
 
 
 
@@ -177,7 +152,7 @@ void disableMainRcvIntr()
 // 
 //
 /////////////////////////////////////////////////////////////////////////////////////////// 
-void Process9900Command(void)
+BOOLEAN Process9900Command(void)
 {
 	// First, make sure the command is for the HART modem.
 	// First character must be an ATTENTION character, followed 
@@ -186,7 +161,7 @@ void Process9900Command(void)
 		(HART_ADDRESS != sz9900CmdBuffer[CMD_ADDR_IDX]))
 	{
 		// either it isn't a command or it's not for the HART module
-		return;
+		return FALSE;
 	}
 	// The command type is the 3rd character in the command
 	switch (sz9900CmdBuffer[CMD_CMD_IDX])
@@ -195,8 +170,9 @@ void Process9900Command(void)
 		Process9900Poll();
 		break;
 	case HART_UPDATE:
-#ifdef QUICK_START
-		// if this is the first update message, check the current mode, and set .	
+  //  Code for QUICK_START is always in
+
+	  // if this is the first update message, check the current mode, and set .
 		if ((FALSE == comm9900started) || (UPDATE_REMINDER_COUNT <= modeUpdateCount)) 
 		{
 			// reset the update reminder count
@@ -238,7 +214,7 @@ void Process9900Command(void)
 				comm9900started = TRUE; 
 			}
 		}
-#endif	
+
 		Process9900Update();
 		modeUpdateCount++;
 		break;
@@ -250,6 +226,7 @@ void Process9900Command(void)
 		Nack9900Msg();
 		break;
 	}	
+	return TRUE;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -760,238 +737,10 @@ int16u Calc9900DbChecksum(void)
  * 
  ******************************************************/
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// \function hsbReceiver  supersedes rxMainIsr()
-//
-// Description:
-//
-// The actual work done in the receive ISR. Checks errors, puts the received character 
-// into the main command buffer
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// Checks the receive error flags, as well as checks to make sure the character 
-// is addressed to the HART board
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void hsbReceiver (BYTE tempChar)
-{
-#if 0
-  All code is done in main
-	// Record the message arrival
-	//----> not here ++numMessagesRcvd;
-	//  Error handling at the call, note that we take the error in the UART and
-	//  not in the received (i.e. we don't care in reporting error)
-
-	// Only store the character if there is a main message in progress for US
-	if (mainMsgInProgress)
-	{
-		// save the character
-		sz9900CmdBuffer[mainMsgCharactersReceived] = tempChar;		
-		// increment the count
-		++mainMsgCharactersReceived;
-	}
-	// Look for the start of a message, the end of a message, or the HART address
-	// If this is the start of a message, set up for receipt
-	if (ATTENTION == tempChar)
-	{
-		// start the receive timer
-		// TODO: need another timer ====> startMainMsgTimer();
-		// clear the ready to process flag
-		mainMsgReadyToProcess = FALSE;
-		// store the character in the first location
-		sz9900CmdBuffer[0] = tempChar;		
-		// set the receive count to 1
-		mainMsgCharactersReceived = 1;
-		// Set the flag to store what's coming in
-		mainMsgInProgress = TRUE;
-	}
-	// We've received 2 characters and the new one is not an 'H', the message
-	// isn't for the HART board, so clear the flag indicating a message is in
-	// progress, and wait for the next message to begin
-	if ((2 == mainMsgCharactersReceived) && (HART_ADDRESS != tempChar)) 
-	{
-		resetForNew9900Message();
-	}
-	// finally, look for the message end <CR>. There had to be at least 5 characters received to 
-	// be a valid message
-	if ((MIN_9900_CMD_SIZE <= mainMsgCharactersReceived) && 
-		(HART_MSG_END == tempChar) && mainMsgInProgress)
-	{
-		// stop the main message timer
-		stopMainMsgTimer();
-		// Shut off the receive flag
-		mainMsgInProgress = FALSE;
-		// process the message
-		mainMsgReadyToProcess = TRUE;
-		// Shut off the receive interrupt until the received message is handled
-		disableMainRcvIntr();
-	}
-#endif
-}
-
-/*!
- *  \function sendHsbReply()   == supersedes =>txMainIsr()
- *  Description:
- *  This function transmits through the hsb uart output stream the hsb reply message stored in sz9900RespBuffer[]
- *
- *  Parameters: The original function uses globals to communicate TBD
- *  Return Type: void.
- *  */
-void sendHsbReply(void)
-{
-#if 0
-	// See if we are done first
-	if (responseSize <= numMainXmitChars)
-	{
-	  // Disable the transmit interrupt
-		disableMainTxIntr();
-		// wait for the UART to not be busy
-		putcUart(&hsbUart); //  TODO replaced  while(MAIN_STAT & UCBUSY);
-		// turn the transmit mode flag off
-		transmitMode = FALSE;
-	}
-	else
-	{
-		// Load the UART with the next character
-		MAIN_TXBUF = sz9900RespBuffer[numMainXmitChars];
-		// increment the index
-		numMainXmitChars++;
-		// reenable the TX interrupt
-		enableMainTxIntr();
-	}
-#endif
-
-}
+	
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: clearMainUartErrFlags()
-//
-// Description:
-//
-// Clears any error flags that were set in reception. 
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void clearMainUartErrFlags(void)
-{
-  // I need to write an equivalent function
-#if 0
 
-	unsigned char temp;
-	// Read the RX buffer to make sure UCOE & UCRXERR are cleared
-	temp = MAIN_RXBUF;
-	// Force the other errors to be cleared.
-	MAIN_STAT &= ~(UCFE | UCPE | UCBRK | UCRXERR | UCOE);
-	// verify that the flags ARE clear
-	if (MAIN_STAT & (UCFE | UCPE | UCBRK | UCRXERR | UCOE))
-	{
-		temp = MAIN_STAT;
-	}
-#endif
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: stopMainMsgTimer()
-//
-// Description:
-//
-// Stops the main UART timer
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void stopMainMsgTimer(void)
-{
-	//mainMsgTimer.onFlag = FALSE;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: incrementMainMsgTimer()
-//
-// Description:
-//
-// Increments the Main UART timer
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void incrementMainMsgTimer(void)
-{
-	// Always increment the update message timeout
-	++UpdateMsgTimeout;
-	//TODO  Need to write another timer
-#if 0
-	if (MAXIMUM_UPDATE_INTERVAL < UpdateMsgTimeout)
-	{
-		PVvariableStatus = VAR_STATUS_BAD;
-	}
-	if (TRUE == mainMsgTimer.onFlag)
-	{
-		// increment the count
-		++mainMsgTimer.count;
-		// check to see if the timer has expired
-		if (TIMEOUT_9900 < mainMsgTimer.count)
-		{
-			// Instead of a flag, simply set up for the next 9900 message
-			resetForNew9900Message();
-		}
-	}
-#endif
-
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: init9900Timers()
-//
-// Description:
-//
-// Sets up the Main 9900 UART timer
-//
-// Parameters: void
-//
-// Return Type: void.
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
-void init9900Timers(void)
-{
-	// initialize the timer to a known state
-	//TODO: implement a hardware timer on hardware.c initHartTimer(&mainMsgTimer);
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -1013,19 +762,15 @@ void init9900Timers(void)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void startMainXmit (void)
 {
-	// Make sure we actually have something to transmit
-	if (0 == responseSize)
+  // Make sure we actually have something to transmit
+  // 12/17/2012 MH- Validate MAX size
+	if (0 == responseSize || responseSize > MAX_9900_RESP_SIZE)
 	{ 
 		return;
 	}
-	// turn on the transmit mode
-	transmitMode = TRUE;
-	// Set the transmit counter to the first character to transmit
-	numMainXmitChars = 0;
-	// Enable the TX interrupt
-	enableMainTxIntr();
-	// Transmit the first character
-	sendHsbReply();
+	BYTE *pChar= sz9900RespBuffer;
+	while(responseSize--)
+    putcUart(*pChar++, &hsbUart);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1048,13 +793,10 @@ void startMainXmit (void)
 void resetForNew9900Message(void)
 {
 	// stop the timer
-	stopMainMsgTimer();
+	//==> TODO any side effect? stopMainMsgTimer();
 	// Make sure the flags are clear
-	mainMsgInProgress = FALSE;
-	mainMsgReadyToProcess = FALSE;
-	mainMsgCharactersReceived = 0;
 	// make sure the characters can be received
-	enableMainRcvIntr();  
+  //==> TODO any side effect? enableMainRcvIntr();
 	responseSize = 0;
 }
 
@@ -1084,9 +826,13 @@ unsigned char setFixedCurrentMode(float cmdValue)
 	// if we are here, we are in the correct loop mode, so see if we can adjust
 	if (0.00 == cmdValue)
 	{
-		// Shut off the 9900 interrupts
+#if 0
+	  MH- Using different HSB control 11/27/12
+	  // Shut off the 9900 interrupts
 		disableMainRcvIntr();
 		disableMainTxIntr();
+#endif
+
 		// the request is 7 to leave the fixed current state
 		loopMode = LOOP_OPERATIONAL;
 		request = (FALSE == saveRequested) ? RESP_REQ_CHANGE_RESUME_NO_SAVE : RESP_REQ_SAVE_AND_RESTART_LOOP;
@@ -1095,12 +841,15 @@ unsigned char setFixedCurrentMode(float cmdValue)
 		// Clear the trim flags
 		setToMinValue = FALSE;
 		setToMaxValue = FALSE;
+#if 0
+    MH- Using different HSB control 11/27/12
 		// re-enable the interrupts
 		if (TRUE == transmitMode)
 		{
 			enableMainTxIntr();
 		}
 		enableMainRcvIntr();
+#endif
 	}
 	else
 	{
@@ -1116,20 +865,26 @@ unsigned char setFixedCurrentMode(float cmdValue)
 		// store the value and mode
 		if (!resp)
 		{
-			// Shut off the 9900 interrupts
-			disableMainRcvIntr();
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
+		  disableMainRcvIntr();
 			disableMainTxIntr();
+#endif
 			loopMode = LOOP_FIXED_CURRENT;
 			requestValue = cmdValue;
 			request = RESP_REQ_CHANGE_SET_FIXED;
 			setToMinValue = (4.0 == cmdValue) ? TRUE : FALSE;
-			setToMaxValue = (20.0 == cmdValue) ? TRUE : FALSE;			
+			setToMaxValue = (20.0 == cmdValue) ? TRUE : FALSE;
+#if 0
+			MH- Different HSB control 11/27/12
 			// re-enable the interrupts
 			if (TRUE == transmitMode)
 			{
 				enableMainTxIntr();
 			}
 			enableMainRcvIntr();
+#endif
+
 		}
 	}
 	return resp;
@@ -1173,20 +928,26 @@ unsigned char trimLoopCurrentZero(float level)
 	}
 	if (!resp)
 	{
-		// Shut off the 9900 interrupts
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
 		disableMainRcvIntr();
 		disableMainTxIntr();
+#endif
 		// We are OK so make the request to the 9900
 		requestValue = level;
 		request = RESP_REQ_CHANGE_4MA_ADJ;
 		// Queue the request to save & restart the loop
 		saveRequested = TRUE;
+#if 0
+		MH- Different HSB control 11/27/12
 		// re-enable the interrupts
 		if (TRUE == transmitMode)
 		{
 			enableMainTxIntr();
 		}
 		enableMainRcvIntr();
+#endif
+
 	}
 	return resp;
 }
@@ -1229,20 +990,25 @@ unsigned char trimLoopCurrentGain(float level)
 	}
 	if (!resp)
 	{
-		// Shut off the 9900 interrupts
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
 		disableMainRcvIntr();
 		disableMainTxIntr();
+#endif
 		// We are OK so make the request to the 9900
 		requestValue = level;
 		request = RESP_REQ_CHANGE_20MA_ADJ;
 		// Queue the request to save & restart the loop
 		saveRequested = TRUE;
+#if 0
+		MH- Different HSB control 11/27/12
 		// re-enable the interrupts
 		if (TRUE == transmitMode)
 		{
 			enableMainTxIntr();
 		}
 		enableMainRcvIntr();
+#endif
 	}
 	return resp;
 }
@@ -1264,9 +1030,11 @@ unsigned char trimLoopCurrentGain(float level)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void setUpperRangeVal(void)
 {
-	// Shut off the 9900 interrupts
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
 	disableMainRcvIntr();
 	disableMainTxIntr();
+#endif
 	// Update the local DB with the requested values so 
 	// the modem can respond quickly
 	u9900Database.db.LOOP_SET_HIGH_LIMIT.floatVal = PVvalue;
@@ -1275,12 +1043,16 @@ void setUpperRangeVal(void)
 	request = RESP_REQ_CHANGE_20MA_POINT;
 	// Queue the request for response 1
 	queueResp1 = TRUE;
+#if 0
+	MH- Different HSB control 11/27/12
 	// re-enable the interrupts
 	if (TRUE == transmitMode)
 	{
 		enableMainTxIntr();
 	}
 	enableMainRcvIntr();
+#endif
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1300,9 +1072,11 @@ void setUpperRangeVal(void)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void setLowerRangeVal(void)
 {
-	// Shut off the 9900 interrupts
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
 	disableMainRcvIntr();
 	disableMainTxIntr();
+#endif
 	// Update the local DB with the requested value so 
 	// the modem can respond quickly
 	u9900Database.db.LOOP_SET_LOW_LIMIT.floatVal = PVvalue;
@@ -1311,12 +1085,16 @@ void setLowerRangeVal(void)
 	request = RESP_REQ_CHANGE_4MA_POINT;
 	// Queue the request for response 1
 	queueResp1 = TRUE;
+#if 0
+	MH- Different HSB control 11/27/12
 	// re-enable the interrupts
 	if (TRUE == transmitMode)
 	{
 		enableMainTxIntr();
 	}
 	enableMainRcvIntr();
+#endif
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1337,9 +1115,11 @@ void setLowerRangeVal(void)
 /////////////////////////////////////////////////////////////////////////////////////////// 
 void setBothRangeVals(float upper, float lower)
 {
-	// Shut off the 9900 interrupts
+#if 0
+    MH- Using different HSB control 11/27/12// Shut off the 9900 interrupts
 	disableMainRcvIntr();
 	disableMainTxIntr();
+#endif
 	// Update the local DB with the requested values so 
 	// the modem can respond quickly
 	u9900Database.db.LOOP_SET_HIGH_LIMIT.floatVal = upper;
@@ -1350,12 +1130,15 @@ void setBothRangeVals(float upper, float lower)
 	// Queue the request for response 3
 	rangeRequestUpper = upper;
 	queueResp3 = TRUE;
+#if 0
+	MH- Different HSB control 11/27/12
 	// re-enable the interrupts
 	if (TRUE == transmitMode)
 	{
 		enableMainTxIntr();
 	}
 	enableMainRcvIntr();
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1408,8 +1191,32 @@ void copy9900factoryDb(void)
 {
 	memcpy(&u9900Database, &factory9900db, sizeof(DATABASE_9900));
 }
-
-
+#if 0
+///////////////////////////////////////////////////////////////////////////////////////////
+//
+// Function Name: killMainTransmit()
+//
+// Description:
+//
+// kills the transmit process
+//
+// Parameters: void
+//
+// Return Type: void.
+//
+// Implementation notes:
+//
+// 
+//
+/////////////////////////////////////////////////////////////////////////////////////////// 
+void killMainTransmit(void)
+{
+	// disable the Tx interrupt
+	disableMainTxIntr();
+	// turn the transmit mode flag off
+	transmitMode = FALSE;
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //

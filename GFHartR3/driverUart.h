@@ -16,10 +16,6 @@
 /*************************************************************************
   *   $DEFINES
 *************************************************************************/
-//  Select ONE of the available clock sources for Hart UART
-//  This will allow LPM0 (SMCLK) or PM3 (ACLK, if possible) for Low Power Mode
-//#define HART_UART_USES_ACLK
-#define HART_UART_USES_SMCLK
 
 
 ///
@@ -46,14 +42,18 @@ typedef enum
   FramingError = 0x80
 } stUartStatus;
 
-
+/*!
+ *  Provide a object-like artifact to abstract hardware uart
+ *
+ *
+ */
 typedef struct
 {
   // Initialized Members - Mostly constants
   const WORD nRxBufSize, nTxBufSize;    //!< Internal buffer sizes
   void (*initUcsi)(void);               //!< Function to initialize msp Uart
   int8u  *fifoRxAlloc, *fifoTxAlloc;    //!< Pointers to static memory allocation
-  const	BOOLEAN bRtsControl;           	//!< TRUE if Tx Requires hardware control \SA Tx handler functions
+  const	BOOLEAN bRtsControl;           	//!< TRUE if Tx Requires hardware control \sa Tx handler functions
 
   const stFuncCtrl
               hRxInter, hTxInter,       //!<  Rx and Tx Interrupts handlers           //TODO: interrupt Enable/Disable is not used
@@ -83,9 +83,9 @@ BOOLEAN putcUart(BYTE ch, stUart *pUart);   //!<  Put a BYTE into output stream
 //
 //	Two Implementations for getting data from output stream, use the one
 //	that matches the one used on RXISR (i.e putFifo or putwFifo)
-BYTE getcUart(stUart *pUart);               //!<  Get a BYTE from the input stream
-WORD getwUart(stUart *pUart);								//!<  Get a WORD from the output stream
-BOOLEAN initUart(stUart *pUart);            //!<  Initialize the indicated Uart
+BYTE getcUart(stUart *pUart);               //  Get a BYTE from the input stream
+WORD getwUart(stUart *pUart);								//  Get a WORD from the output stream
+BOOLEAN initUart(stUart *pUart);            //  Initialize the indicated Uart
 
 
 
@@ -103,6 +103,29 @@ extern BOOLEAN  hartRxFrameError,           //!<  The serial isr receiver has de
 extern stUart   hartUart,
                 hsbUart;
 
+/*!
+ *  hsbActivitySlot
+ *  This flag indicates that HSB is in the traffic slot for the hart module,
+ *  It is TRUE when Hsb attention timer prepares the reception by enabling the RXIE and FALSE after Hsb has send it last TX bit
+ *  While this condition is TRUE no Low power mode is allowed
+ */
+extern volatile BOOLEAN   hsbActivitySlot;          //!<  This flag indicates the Flash write window opportunity for HSB
+/*!
+ *  flashWriteEnable
+ *  This flag is evaluated at the end of Hart frame and takes into account the HSB flash write slot.
+ *  Test this flag (Read Only) in the main loop before writing to flash.
+ *
+ */
+extern volatile BOOLEAN   flashWriteEnable;
+
+/*!
+ *  iTx9900CmdBuf
+ *  This a global version of the reception command index. Once the Hsb receiver ISR ends receiving data, it load its
+ *  internal pointer to the global value. That way the internal state can be reset
+ */
+extern volatile WORD iTx9900CmdBuf;         //!<  This flag indicates the Flash write window opportunity for HSB
+
+
 /*************************************************************************
   *   $INLINE FUNCTIONS
 *************************************************************************/
@@ -110,7 +133,7 @@ extern stUart   hartUart,
 //=========================================INLINES===============================================
 
 /*
- * \function isRxEmpty
+ * \fn isRxEmpty
  * Returns TRUE if the input stream is empty
  */
 inline BOOLEAN isRxEmpty(stUart *pUart)
@@ -120,7 +143,7 @@ inline BOOLEAN isRxEmpty(stUart *pUart)
 }
 
 /*
- * \function isRxFull
+ * \fn isRxFull
  * Returns TRUE if the input stream is full
  */
 inline BOOLEAN isRxFull(stUart *pUart)
@@ -129,7 +152,7 @@ inline BOOLEAN isRxFull(stUart *pUart)
 }
 
 /*
- * \function isTxEmpty
+ * \fn isTxEmpty
  * Returns TRUE if the output stream is empty
  */
 inline BOOLEAN isTxEmpty(stUart *pUart)
@@ -138,7 +161,7 @@ inline BOOLEAN isTxEmpty(stUart *pUart)
 }
 
 /*
- * \function isTxFull
+ * \fn isTxFull
  * Returns TRUE if the output stream is full
  */
 inline BOOLEAN isTxFull(stUart *pUart)
@@ -148,7 +171,7 @@ inline BOOLEAN isTxFull(stUart *pUart)
 
 /////////// Hart Rx, Tx, RxMode //////////////
 /*
- * \function disableHartRxInter
+ * \fn disableHartRxInter
  * Disable Hart serial transmit interrupt -
  */
 inline void disableHartRxIntr(void)
@@ -156,7 +179,7 @@ inline void disableHartRxIntr(void)
   UCA1IE &= ~UCRXIE;
 }
 /*
- * \function enableHartRxInter
+ * \fn enableHartRxInter
  * Enable Hart transmit serial interrupt -
  */
 inline void enableHartRxIntr(void)
@@ -164,7 +187,7 @@ inline void enableHartRxIntr(void)
   UCA1IE |= UCRXIE;
 }
 /*
- * \function isHartRxIntrEnabled
+ * \fn isHartRxIntrEnabled
  * Enable Hart transmit serial interrupt -
  */
 inline BOOLEAN isHartRxIntrEnabled(void)
@@ -173,7 +196,7 @@ inline BOOLEAN isHartRxIntrEnabled(void)
 }
 
 /*
- * \function disableHartTxInter
+ * \fn disableHartTxInter
  * Disable Hart serial transmit interrupt -
  */
 inline void disableHartTxIntr(void)
@@ -181,7 +204,7 @@ inline void disableHartTxIntr(void)
   UCA1IE &= ~UCTXIE;
 }
 /*
- * \function enableHartTxInter
+ * \fn enableHartTxInter
  * Enable Hart transmit serial interrupt -
  */
 inline void enableHartTxIntr(void)
@@ -189,7 +212,7 @@ inline void enableHartTxIntr(void)
   UCA1IE |= UCTXIE;
 }
 /*
- * \function isHartTxIntrEnabled
+ * \fn isHartTxIntrEnabled
  * Enable Hart transmit serial interrupt -
  */
 inline BOOLEAN isHartTxIntrEnabled(void)
@@ -198,7 +221,7 @@ inline BOOLEAN isHartTxIntrEnabled(void)
 }
 //////// TxDriver
 /*!
- *  \function disableHartTxDriver()
+ *  \fn disableHartTxDriver()
  *  Put the hart modem in listen mode
  */
 inline void disableHartTxDriver(void)
@@ -206,7 +229,7 @@ inline void disableHartTxDriver(void)
   HART_UART_TXCTRL_PORTOUT |= HART_UART_TXCTRL_MASK;
 }
 /*!
- *  \function enableHartTxDriver()
+ *  \fn enableHartTxDriver()
  *  Put the hart modem in talk mode
  */
 inline void enableHartTxDriver(void)
@@ -214,7 +237,7 @@ inline void enableHartTxDriver(void)
   HART_UART_TXCTRL_PORTOUT &= ~HART_UART_TXCTRL_MASK;
 }
 /*
- * \function isHartTxIntrEnabled
+ * \fn isHartTxIntrEnabled
  * Enable Hart transmit serial interrupt -
  */
 inline BOOLEAN isEnabledHartTxDriver(void)
@@ -222,7 +245,7 @@ inline BOOLEAN isEnabledHartTxDriver(void)
   return (HART_UART_TXCTRL_PORTOUT & HART_UART_TXCTRL_MASK) ? FALSE : TRUE;  // 1= Disabled
 }
 /*
- * \function hartTxChar
+ * \fn hartTxChar
  * Just an abstraction of the TXSBUF
  */
 inline void hartTxChar(BYTE ch)
@@ -231,7 +254,7 @@ inline void hartTxChar(BYTE ch)
 }
 //////// Tx/Rx Loopback
 /*!
- *  \function disableHartLoopBack()
+ *  \fn disableHartLoopBack()
  *  Remove internal connection between RX and TX line
  */
 inline void disableHartLoopBack(void)
@@ -239,7 +262,7 @@ inline void disableHartLoopBack(void)
   UCA1STAT &= ~UCLISTEN;
 }
 /*!
- *  \function enableHartLoopBack()
+ *  \fn enableHartLoopBack()
  *  Connect internally RX and TX line
  */
 inline void enableHartLoopBack(void)
@@ -247,7 +270,7 @@ inline void enableHartLoopBack(void)
   UCA1STAT |= UCLISTEN;
 }
 /*
- * \function isEnabledHartLoopBack
+ * \fn isEnabledHartLoopBack
  * Get the status of internal TX and RX loopback
  */
 inline BOOLEAN isEnabledHartLoopBack(void)
@@ -257,7 +280,7 @@ inline BOOLEAN isEnabledHartLoopBack(void)
 ///===
 /////////// HSB- High Speed Bus Rx, Tx //////////////
 /*
- * \function disableHsbRxInter
+ * \fn disableHsbRxInter
  * Disable Hsb serial transmit interrupt -
  */
 inline void disableHsbRxIntr(void)
@@ -265,7 +288,7 @@ inline void disableHsbRxIntr(void)
   UCA0IE &= ~UCRXIE;
 }
 /*
- * \function enableHsbRxInter
+ * \fn enableHsbRxInter
  * Enable Hsb transmit serial interrupt -
  */
 inline void enableHsbRxIntr(void)
@@ -273,7 +296,7 @@ inline void enableHsbRxIntr(void)
   UCA0IE |= UCRXIE;
 }
 /*
- * \function isHsbRxIntrEnabled
+ * \fn isHsbRxIntrEnabled
  * Enable Hsb transmit serial interrupt -
  */
 inline BOOLEAN isHsbRxIntrEnabled(void)
@@ -282,7 +305,7 @@ inline BOOLEAN isHsbRxIntrEnabled(void)
 }
 
 /*
- * \function disableHsbTxInter
+ * \fn disableHsbTxInter
  * Disable Hsb serial transmit interrupt -
  */
 inline void disableHsbTxIntr(void)
@@ -290,7 +313,7 @@ inline void disableHsbTxIntr(void)
   UCA0IE &= ~UCTXIE;
 }
 /*
- * \function enableHsbTxInter
+ * \fn enableHsbTxInter
  * Enable Hsb transmit serial interrupt -
  */
 inline void enableHsbTxIntr(void)
@@ -298,7 +321,7 @@ inline void enableHsbTxIntr(void)
   UCA0IE |= UCTXIE;
 }
 /*
- * \function isHsbTxIntrEnabled
+ * \fn isHsbTxIntrEnabled
  * Enable Hsb transmit serial interrupt -
  */
 inline BOOLEAN isHsbTxIntrEnabled(void)
@@ -307,7 +330,7 @@ inline BOOLEAN isHsbTxIntrEnabled(void)
 }
 //////// Tx/Rx Loopback
 /*!
- *  \function disableHsbLoopBack()
+ *  \fn disableHsbLoopBack()
  *  Remove internal connection between RX and TX line
  */
 inline void disableHsbLoopBack(void)
@@ -315,7 +338,7 @@ inline void disableHsbLoopBack(void)
   UCA0STAT &= ~UCLISTEN;
 }
 /*!
- *  \function enableHsbLoopBack()
+ *  \fn enableHsbLoopBack()
  *  Connect internally RX and TX line
  */
 inline void enableHsbLoopBack(void)
@@ -323,7 +346,7 @@ inline void enableHsbLoopBack(void)
   UCA0STAT |= UCLISTEN;
 }
 /*
- * \function isEnabledHsbLoopBack
+ * \fn isEnabledHsbLoopBack
  * Get the status of internal TX and RX loopback
  */
 inline BOOLEAN isEnabledHsbLoopBack(void)
@@ -331,7 +354,7 @@ inline BOOLEAN isEnabledHsbLoopBack(void)
   return (UCA0STAT & UCLISTEN) ? TRUE : FALSE;
 }
 /*
- * \function hsbTxChar
+ * \fn hsbTxChar
  * Just an abstraction of the TXSBUF
  */
 inline void hsbTxChar(BYTE ch)

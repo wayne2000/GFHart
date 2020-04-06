@@ -1,89 +1,38 @@
-//
-// Module Name:  common_h_cmd.c
-//
-// Functional Unit: 
-//
-// Description:
-//
-// This module provides command handling for flow sensor commands. 
-//
-// Exported Interfaces:
-//
-// common_h_cmd.h - This interface file includes all exported interfaces
-//               from this module.
-//
-// Document Reference(s):
-//
-// PDD-xxxx
-//
-// Implementation Notes:
-//
-// 
-//
-// Revision History:
-// Date    Rev.   Engineer     Description
-// -------- ----- ------------ --------------
-// 04/23/11  0    Vijay Soni    Creation
-// 11/08/12  3    Marco Henry   Redesign Comm drivers, organize code in app layers
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-//=======================
-// INCLUDES
-//=======================
+/*!
+ *  \file     common_h_cmd_r3.c
+ *  \brief    This module provides command handling for flow sensor commands.
+ *
+ *  Revision History:
+ *  Date    Rev.   Engineer     Description
+ *  -------- ----- ------------ --------------
+ *  04/23/11  0    Vijay Soni   Creation
+ *  12/11/12       MH           Revision
+ */
+ 
 #include <msp430f5528.h>
 #include <string.h>
 #include "hardware.h"
 #include "protocols.h"
-#include "hartr3.h"
-#include "main9900r3.h"
-#include "utilitiesr3.h"
-#include "common_h_cmdr3.h"
-
-//========================
-//  LOCAL DEFINES
-//========================
-//================================
-//  LOCAL PROTOTYPES.
-//================================
-
-//========================
-//  GLOBAL DATA
-//========================
-float lastRequestedCurrentValue = 0.0;      //!< The last commanded current value from command 40 is here
-// This flag is used by commands 11 & 21 to indicate the tag did not
-// match, and that processHartCommand() should return false. All other
-// commands set the value to false.
+#include "hart_r3.h"
+#include "main9900_r3.h"
+#include "utilities_r3.h"
+#include "common_h_cmd_r3.h"
+/*!
+ *  This flag is used by commands 11 & 21 to indicate the tag did not match, and that
+ *  processHartCommand() should return false. All other commands set the value to false.
+ */
 unsigned char badTagFlag = FALSE;
-int32u dataTimeStamp = 0;
-
-//========================
-//  LOCAL DATA
-//========================
-
-//==============================================================================
-// FUNCTIONS
-//==============================================================================
 
 
-
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_0()
-//
-// Description:
-//
-// Process the HART command 0 : Transmit Unique ID
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//  MH- Added Byte order from HCF_SPEC-127  Rev 7.1
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_0()
+ *  \brief  Process the HART command 0 : Transmit Unique ID
+ *
+ *  Implementation notes:
+ *  MH- Added Byte order from HCF_SPEC-127  Rev 7.1
+ *
+ *
+ */
 void common_cmd_0(void)
 {
 	// Byte Count
@@ -145,23 +94,10 @@ void common_cmd_0(void)
 	++respBufferSize;		
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_1()
-//
-// Description:
-//
-// Process the HART command 1 : Read PV 
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn  common_cmd_1()
+ *  \brief Process the HART command 1 : Read PV
+ */
 void common_cmd_1(void)
 {
 	unsigned char respCode = (updateDelay) ? UPDATE_FAILURE : RESP_SUCCESS;
@@ -195,23 +131,10 @@ void common_cmd_1(void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_2()
-//
-// Description:
-//
-// Process the HART command 2 : Transmit PV current, PV % range
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_2()
+ *  \brief  Process the HART command 2 : Transmit PV current, PV % range
+ */
 void common_cmd_2(void)
 {
 	// Capture the loop current value first so it doesn't change
@@ -250,23 +173,10 @@ void common_cmd_2(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_3()
-//
-// Description:
-//
-// Process the HART command 3 : Transmit current PV & dynamic variables
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_3()
+ *  \brief  Process the HART command 3 : Transmit current PV & dynamic variables
+ */
 void common_cmd_3(void)
 {
 	float loopCurrent = (TRUE == updateInProgress) ? reportingLoopCurrent : ma4_20;
@@ -281,7 +191,10 @@ void common_cmd_3(void)
 	else
 	{
 		// returning both PV & SV
-		szHartResp[respBufferSize] = 16;  // Byte count
+		//szHartResp[respBufferSize] = 16;  // Byte count
+	  //!MH  1/17/13 Fix: UAL011b 3262 Command 9 and Command 3 secondary values are not consist
+	  //  We should not send more than supported
+	  szHartResp[respBufferSize] = (NOT_USED == SVunits) ? 11 : 16;  // Byte count
 	}
 	++respBufferSize;							
 	szHartResp[respBufferSize] = 0;   // Device Status high byte
@@ -303,42 +216,7 @@ void common_cmd_3(void)
 		szHartResp[respBufferSize] = u9900Database.db.UnitsPrimaryVar;
 		++respBufferSize;
 		copyFloatToRespBuf(PVvalue);					
-		if (NOT_USED == SVunits)
-		{
-#if 1		
-			// Return CELSIUS as a unit code with a non-signaling NaN value
-			// Unit code cannot be 0 or 250, it must be what it would be in
-			// a different configuration, per Sean Vincent @ HCF. Since Celsius
-			// is the most likely SV unit, use it.	
-			// NOTE: UAL011b may still fail, because it does not handle non-signaling
-			// NaN values. In this case, HCF must evaluate the test case manually to 
-			// verify compliance.
-			szHartResp[respBufferSize] = CELSIUS;
-			++respBufferSize;
-			// Return Non-signaling NaN per Sean Vincent
-			szHartResp[respBufferSize] = 0x7f;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0xff;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0xff;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0xff;
-			++respBufferSize;
-#else
-			szHartResp[respBufferSize] = NOT_USED;
-			++respBufferSize;
-			// Return Non-signaling NaN per Sean Vincent
-			szHartResp[respBufferSize] = 0x7f;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0xA0;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0;
-			++respBufferSize;
-			szHartResp[respBufferSize] = 0;
-			++respBufferSize;
-#endif			
-		}
-		else
+		if (NOT_USED != SVunits)    //!MH - DO not send ANY reference to SV if instrument can't handle
 		{
 			szHartResp[respBufferSize] = SVunits;
 			++respBufferSize;
@@ -347,23 +225,10 @@ void common_cmd_3(void)
 	}					
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: flow_cmd_6()
-//
-// Description:
-//
-// Process the HART command 6 : Save Polling address
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_6()
+ *  \brief  Process the HART command 6 : Save Polling address
+ */
 void common_cmd_6(void)
 {
 	unsigned char pollAddress;
@@ -440,23 +305,10 @@ void common_cmd_6(void)
 	}	
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_7()
-//
-// Description:
-//
-// Process the HART command 7 : Read Loop Configuration
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_7()
+ *  \brief  Process the HART command 7 : Read Loop Configuration
+ */
 void common_cmd_7(void)
 {
 	// This command always succeeds
@@ -474,23 +326,10 @@ void common_cmd_7(void)
 	++respBufferSize;							
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_8()
-//
-// Description:
-//
-// Process the HART command 8 : Read dynamic Variable classification
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_8()
+ *  \brief  Process the HART command 8 : Read dynamic Variable classification
+ */
 void common_cmd_8(void)
 {
 	szHartResp[respBufferSize] = 6;  // Byte count
@@ -500,12 +339,29 @@ void common_cmd_8(void)
 	szHartResp[respBufferSize] = (startUpDataLocalV.fromPrimary) ? 
 		startUpDataLocalNv.Primary_status : startUpDataLocalNv.Secondary_status;  // Status byte
 	++respBufferSize;	
-	// units are the PV classification
-	szHartResp[respBufferSize] = u9900Database.db.Hart_Dev_Var_Class;   
-	++respBufferSize;			
-	// units are the SV units				
-	szHartResp[respBufferSize] = 0;   
+	//
+	unsigned char PvHartClassification = u9900Database.db.Hart_Dev_Var_Class;
+	// PV classification
+	szHartResp[respBufferSize] = PvHartClassification;
+	++respBufferSize;
+	//
+	//!MH 1/17/13  Fix to pass test UAL012
+	unsigned char SvHartClassification = DVC_TEMPERATURE;   // Works for most SV
+
+	if (250 <= u9900Database.db.UnitsSecondaryVar)          //  We don't have SV
+	  SvHartClassification = NOT_USED;  // !MH was 0;
+	else
+	  /* We have a SV and need to know its classification, Temp is set as default */
+	  if(PvHartClassification == DVC_LEVEL)                 // Is the special case LEVEL */
+	    if(u9900Database.db.UnitsSecondaryVar == VOLUME_PER_MASS_UNITS_LB ||
+	        u9900Database.db.UnitsSecondaryVar == VOLUME_PER_MASS_UNITS_KG )  // last 2 cases by asking used units in SV
+	      SvHartClassification = DVC_VOLUME_PER_MASS;
+	    else
+	      SvHartClassification = DVC_VOLUME_PER_VOLUME;
+
+	szHartResp[respBufferSize] = SvHartClassification;
 	++respBufferSize;	
+
 	// units are the TV units				
 	szHartResp[respBufferSize] = NOT_USED;   
 	++respBufferSize;	
@@ -515,23 +371,10 @@ void common_cmd_8(void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_9()
-//
-// Description:
-//
-// Process the HART command 9 : Read Device Variables with Status
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_9()
+ *  \brief  Process the HART command 9 : Read Device Variables with Status
+ */
 void common_cmd_9(void)
 {
 	float loopCurrent = (TRUE == updateInProgress) ? reportingLoopCurrent : ma4_20;
@@ -621,32 +464,18 @@ void common_cmd_9(void)
 				}
 				else
 				{
-					// Device variable classification					
-					szHartResp[respBufferSize] = 0;   
-					++respBufferSize;		
-#if 1						
-					// Return CELSIUS as a unit code with a non-signaling NaN value
-					// Unit code cannot be 0 or 250, it must be what it would be in
-					// a different configuration, per Sean Vincent @ HCF. Since Celsius
-					// is the most likely SV unit, use it.	
-					// NOTE: UAL011b may still fail, because it does not handle non-signaling
-					// NaN values. In this case, HCF must evaluate the test case manually to 
-					// verify compliance.
-					// Units code				
-					szHartResp[respBufferSize] = CELSIUS;   
+
+				  //!MH 1/17/13 Set Variable status as indicated in Hart HCF_SPEC-127 Rev. 7.1 for Command 9, unsupported variables (section 6.10)
+				  //
+				  //  Device VAriable Classification = 0 (DVC_DEVICE_VAR_NOT_CLASSIFIED)
+				  //  Value =   0x7F, 0xA0, 0x00, 0x00
+				  //  Status = BAD,  Limit= CONSTANT, Unit code 250 (NOT_USED)
+
+				  // Device variable classification
+					szHartResp[respBufferSize] = DVC_DEVICE_VAR_NOT_CLASSIFIED;
 					++respBufferSize;
-					// Value
-					szHartResp[respBufferSize] = 0x7F;   
-					++respBufferSize;			
-					szHartResp[respBufferSize] = 0xFF;   
-					++respBufferSize;			
-					szHartResp[respBufferSize] = 0xFF;   
-					++respBufferSize;			
-					szHartResp[respBufferSize] = 0xFF;   
-					++respBufferSize;		
-#else
 					// Units code				
-					szHartResp[respBufferSize] = NOT_USED;   
+					szHartResp[respBufferSize] = NOT_USED;
 					++respBufferSize;
 					// Value
 					szHartResp[respBufferSize] = 0x7F;   
@@ -657,7 +486,6 @@ void common_cmd_9(void)
 					++respBufferSize;			
 					szHartResp[respBufferSize] = 0;   
 					++respBufferSize;		
-#endif						
 					// Status							
 					szHartResp[respBufferSize] = VAR_STATUS_BAD | LIM_STATUS_CONST;   
 					++respBufferSize;			
@@ -720,33 +548,15 @@ void common_cmd_9(void)
 				break;
 			}
 		}
-		/*!
-		 * Command Summary Specification HCF_SPEC-99 Section 5.3 specifies that "time is contained
-		 * in a 32-bit binary integer with lsb representing 1/32 of mS"
-		 * We should multiply by timerTicks by 125 * 32
-		 */
 		// data time stamp 
 		copyLongToRespBuf(dataTimeStamp);
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_11()
-//
-// Description:
-//
-// Process the HART command 11 : Transmit Unique ID if Tag matches
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn  common_cmd_11()
+ *  \brief Process the HART command 11 : Transmit Unique ID if Tag matches
+ */
 void common_cmd_11(void)
 {
 	if (!memcmp(&(szHartCmd[respBufferSize+1]), &(startUpDataLocalNv.TagName[0]), SHORT_TAG_SIZE))
@@ -766,23 +576,10 @@ void common_cmd_11(void)
 	}							
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_12()
-//
-// Description:
-//
-// Process the HART command 12 : Transmit MSG
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_12()
+ *  \brief  Process the HART command 12 : Transmit MSG
+ */
 void common_cmd_12(void)
 {
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
@@ -813,23 +610,10 @@ void common_cmd_12(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_13()
-//
-// Description:
-//
-// Process the HART command 13 : Transmit Tag, Descriptor, and date
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_13()
+ *  \brief  Process the HART command 13 : Transmit Tag, Descriptor, and date
+ */
 void common_cmd_13(void)
 {
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
@@ -862,23 +646,10 @@ void common_cmd_13(void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: flow_cmd_14()
-//
-// Description:
-//
-// Process the HART command 14 : Transmit PV sensor information
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_14()
+ *  \brief  Process the HART command 14 : Transmit PV sensor information
+ */
 void common_cmd_14(void)
 {
 	float span = 0.0;
@@ -925,23 +696,10 @@ void common_cmd_14(void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_15()
-//
-// Description:
-//
-// Process the HART command 15 : Read Device information
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_15()
+ *  \brief  Process the HART command 15 : Read Device information
+ */
 void common_cmd_15(void)
 {
 	float damping = 0.0;
@@ -995,23 +753,10 @@ void common_cmd_15(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_16()
-//
-// Description:
-//
-// Process the HART command 16 : Transmit Final Assembly Number
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_16()
+ *  \brief  Process the HART command 16 : Transmit Final Assembly Number
+ */
 void common_cmd_16(void)
 {
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
@@ -1043,23 +788,11 @@ void common_cmd_16(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_17()
-//
-// Description:
-//
-// Process the HART command 17 : Write MSG
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     common_cmd_17()
+ *  \brief  Process the HART command 17 : Write MSG
+ */
 void common_cmd_17(void)
 {
 	// First check to see if we have too few bytes
@@ -1098,23 +831,10 @@ void common_cmd_17(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_18()
-//
-// Description:
-//
-// Process the HART command 18 : Write tag, descriptor & date
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_18()
+ *  \brief  Process the HART command 18 : Write tag, descriptor & date
+ */
 void common_cmd_18(void)
 {
 	// First check to see if we have too few bytes
@@ -1153,22 +873,10 @@ void common_cmd_18(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_19()
-//
-// Description:
-//
-// Process the HART command 19 : Write final assembly number
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_19()
+ *  \brief  Process the HART command 19 : Write final assembly number
+ */
 void common_cmd_19(void)
 {
 	// First check to see if we have too few bytes
@@ -1207,22 +915,10 @@ void common_cmd_19(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_20()
-//
-// Description:
-//
-// Process the HART command 20 : Read Long Tag
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_20()
+ *  \brief  Process the HART command 20 : Read Long Tag
+ */
 void common_cmd_20(void)
 {
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
@@ -1255,22 +951,10 @@ void common_cmd_20(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_21()
-//
-// Description:
-//
-// Process the HART command 21 : Read unique ID associated w/ Long Tag
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_21()
+ *  \brief  Process the HART command 21 : Read unique ID associated w/ Long Tag
+ */
 void common_cmd_21(void)
 {
 	if (!memcmp(&szHartCmd[respBufferSize+1], &startUpDataLocalNv.LongTag, LONG_TAG_SIZE))
@@ -1290,22 +974,10 @@ void common_cmd_21(void)
 	}							
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_22()
-//
-// Description:
-//
-// Process the HART command 22 : Write Long Tag
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_22()
+ *  \brief  Process the HART command 22 : Write Long Tag
+ */
 void common_cmd_22(void)
 {
 	// First check to see if we have too few bytes
@@ -1510,22 +1182,11 @@ void common_cmd_37(void)
 }
 #endif
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_38()
-//
-// Description:
-//
-// Process the HART command 38 : Reset Configuration Changed flag
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_38()
+ *  \brief  Process the HART command 38 : Reset Configuration Changed flag
+ */
+
 void common_cmd_38(void)
 {
 	unsigned char respCode;
@@ -1596,22 +1257,11 @@ void common_cmd_38(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_39()
-//
-// Description:
-//
-// Process the HART command 39 : EPROM Control Burn/Restore (Deprecated)
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     common_cmd_39()
+ *  \brief  Process the HART command 39 : EPROM Control Burn/Restore (Deprecated)
+ */
 void common_cmd_39(void)
 {
 	unsigned char burnCommand = szHartCmd[respBufferSize+1];
@@ -1665,23 +1315,11 @@ void common_cmd_39(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_40()
-//
-// Description:
-//
-// Process the HART command 40 : Enter/Exit Fixed Current Mode
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     common_cmd_40()
+ *  \brief  Process the HART command 40 : Enter/Exit Fixed Current Mode
+ */
 void common_cmd_40 (void)
 {
 	U_LONG_FLOAT cmdCurrent;
@@ -1756,23 +1394,10 @@ void common_cmd_40 (void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_42()
-//
-// Description:
-//
-// Process the HART command 42 : Perform Device Reset
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_42()
+ *  \brief  Process the HART command 42 : Perform Device Reset
+ */
 void common_cmd_42 (void)
 {
 	// Are we busy?
@@ -1795,28 +1420,20 @@ void common_cmd_42 (void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_45()
-//
-// Description:
-//
-// Process the HART command 45 : Trim Loop Current Zero
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_45()
+ *  \brief  Process the HART command 45 : Trim Loop Current Zero
+ *
+ *  1/24/13 Resets the 9900 update message counter to remind of a current trim
+ */
 void common_cmd_45 (void)
 {
 	U_LONG_FLOAT cmdCurrent;
 	// Are we busy?
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
+
+	//  MH - 1/24/13 Reset the 9900 reminder
+	modeUpdateCount =0;
 	// Is loop current signaling disabled?
 	if (CURRENT_MODE_DISABLE == startUpDataLocalNv.currentMode)
 	{
@@ -1861,28 +1478,18 @@ void common_cmd_45 (void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_46()
-//
-// Description:
-//
-// Process the HART command 46 : Trim Loop Current Gain
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_46()
+ *  \brief  Process the HART command 46 : Trim Loop Current Gain
+ *  1/24/13 Resets the 9900 update message counter to remind of a current trim
+ */
 void common_cmd_46 (void)
 {
 	U_LONG_FLOAT cmdCurrent;
 	// Are we busy?
 	unsigned char respCode = (deviceBusyFlag) ? HART_DEVICE_BUSY : RESP_SUCCESS;
+	//  Reset 9900 reminder
+	modeUpdateCount =0;
 	// Is loop current signaling disabled?
 	if (CURRENT_MODE_DISABLE == startUpDataLocalNv.currentMode)
 	{
@@ -1929,23 +1536,10 @@ void common_cmd_46 (void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_48()
-//
-// Description:
-//
-// Process the HART command 48 : Transmit Additional Status
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_48()
+ *  \brief  Process the HART command 48 : Transmit Additional Status
+ */
 void common_cmd_48(void)
 {
 	unsigned char match = TRUE;
@@ -2022,23 +1616,10 @@ void common_cmd_48(void)
 	++respBufferSize;							
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_54()
-//
-// Description:
-//
-// Process the HART command 54 : Read Device Variable Information
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_54()
+ *  \brief  Process the HART command 54 : Read Device Variable Information
+ */
 void common_cmd_54 (void)
 {
 	union 
@@ -2161,69 +1742,30 @@ void common_cmd_54 (void)
 }
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_57()
-//
-// Description:
-//
-// Process the HART command 57 : Read Unit Tag, Descriptor, and Date (Deprecated)
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_57()
+ *  \brief  Process the HART command 57 : Read Unit Tag, Descriptor, and Date (Deprecated)
+ */
 void common_cmd_57 (void)
 {
 	// Function is identical to command 13, so just use it
 	common_cmd_13();
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_58()
-//
-// Description:
-//
-// Process the HART command 58 : Write Unit Tag, Descriptor, and Date (Deprecated)
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     common_cmd_58()
+ *  \brief  Process the HART command 58 : Write Unit Tag, Descriptor, and Date (Deprecated)
+ */
 void common_cmd_58 (void)
 {
 	// the code is identical to command 18, so just use it
 	common_cmd_18();
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: common_cmd_110()
-//
-// Description:
-//
-// Process the HART command 110 : Read All Dynamic Variables (Deprecated)
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn  common_cmd_110()
+ *  \brief Process the HART command 110 : Read All Dynamic Variables (Deprecated)
+ */
 void common_cmd_110 (void)
 {
 	//unsigned char respCode = (updateDelay) ? UPDATE_FAILURE : RESP_SUCCESS;
@@ -2245,23 +1787,17 @@ void common_cmd_110 (void)
 	copyFloatToRespBuf(SVvalue);					
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: flow_tx_error()
-//
-// Description:
-//
-// Respond to the master with a response code
-//
-// Parameters: unsigned char: response code
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     void common_tx_error(unsigned char respCode)
+ *  \brief  Respond to the master with a response code
+ *
+ *  \param  respCode  The response code to send
+ *
+ *  Global respBufferSize indicates the position in the buffer\n
+ *  The response is built in a global buffer szHartResp[] , and respBufferSize is incremented to
+ *  point to next position on buffer.
+ */
+
 void common_tx_error(unsigned char respCode)
 {
 	szHartResp[respBufferSize] = 2; // Byte count
@@ -2273,23 +1809,12 @@ void common_tx_error(unsigned char respCode)
 	++respBufferSize;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: flow_tx_comm_error()
-//
-// Description:
-//
-// Responds to the Master with a communications error code
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     void common_tx_comm_error(void)
+ *  \brief  Responds to the Master with a communications error code
+ *
+ */
 void common_tx_comm_error(void)
 {
 	
@@ -2323,24 +1848,11 @@ void common_tx_comm_error(void)
 
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: mfr_cmd_219()
-//
-// Description:
-//
-// Process the HART command 219 : Write device ID
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//		This MFR-specific command is used to set the device ID. It is not 
-//		to be published in the 
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     mfr_cmd_219()
+ *  \brief  Process the HART command 219 : Write device ID
+ */
+
 void mfr_cmd_219(void)
 {
 	// First check to see if we have too few bytes
@@ -2381,24 +1893,10 @@ void mfr_cmd_219(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: mfr_cmd_220()
-//
-// Description:
-//
-// Process the HART command 220 : Retrieve Error Counters
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//		This MFR-specific command is used to retrieve the error counters. It is not 
-//		to be published in the DD
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     mfr_cmd_220()
+ *  \brief  Process the HART command 220 : Retrieve Error Counters
+ */
 void mfr_cmd_220(void)
 {
 	// First check to see if we have too few bytes
@@ -2456,24 +1954,10 @@ void mfr_cmd_220(void)
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: mfr_cmd_221()
-//
-// Description:
-//
-// Process the HART command 221 : Reset Error Counters
-//
-// Parameters: void
-//
-// Return Type: void
-//
-// Implementation notes:
-//		This MFR-specific command is used to reset the error counters. It is not 
-//		to be published in the DD
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+/*!
+ *  \fn     mfr_cmd_221()
+ *  \brief  Process the HART command 221 : Reset Error Counters
+ */
 void mfr_cmd_221(void)
 {
 	// First check to see if we have too few bytes
@@ -2564,6 +2048,13 @@ void mfr_cmd_221(void)
 //
 //
 /////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     mfr_cmd_222()
+ *  \brief  Process the HART command 222 : Dump Nonvolatile memory
+ *          This MFR-specific command is used to dump the NV memory. It is not to be published in the DD
+ *
+ */
 void mfr_cmd_222(void)
 {
 	// First check to see if we have too few bytes
@@ -2604,22 +2095,17 @@ void mfr_cmd_222(void)
 
 
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: CalculatePercentRange()
-//
-// Description:
-//
-// Utility to calculate the passed value as a percent of range
-//
-// Parameters: float - the current loop value
-//
-// Return Type: float - percent of range
-//
-// Implementation notes:
-//
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ *  \fn     float CalculatePercentRange(float upper, float lower, float value)
+ *  \brief  Utility to calculate the passed value as a percent of range
+ *
+ *  \param  upper
+ *  \param  lower
+ *  \param  value - the current loop value
+ *  \return a float indicating the percent of range
+ *
+ */
 float CalculatePercentRange(float upper, float lower, float value)
 {
 	float percentRange = ((value - lower)/(upper - lower)) * 100.0;

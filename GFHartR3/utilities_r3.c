@@ -1,57 +1,19 @@
-///////////////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) AB Tech Solution LLC 2011 All Rights Reserved. 
-//
-// This code may not be copied without the express written consent of 
-// AB Tech Solution LLC.
-//
-//
-// Client: GF
-//
-// THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-// KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Module Name:  utilities.c
-//
-// Functional Unit: 
-//
-// Description:
-//
-// This module provides utility functions for the flash memory, and other 
-// miscellaneous functions.
-//
-// Exported Interfaces:
-//
-// utilities.h - This interface file includes all exported interfaces
-//               from this module.
-//
-// Document Reference(s):
-//
-// PDD-xxxx
-//
-// Implementation Notes:
-//
-// 
-//
-// Revision History:
-// Date    Rev.   Engineer     Description
-// -------- ----- ------------ --------------
-// 04/04/11  0    Vijay Soni    Creation
-//
-// 04/07/11  0    Patel 	Add funcations
-//
-//
-///////////////////////////////////////////////////////////////////////////////////////////
- 
+/*!
+ *  \file   utilities_r3.c
+ *  \brief  This module provides utility functions for the flash memory, and other miscellaneous functions
+ *
+ *  Revision History:
+ *  Date    Rev.   Engineer     Description
+ *  -------- ----- ------------ --------------
+ *  04/04/11  0    Vijay Soni    Creation
+ *
+ *  04/07/11  0    Patel   Add funcations
+ *
+ */
 #include <msp430f5528.h>
 #include "define.h"
 #include "hardware.h"
-#include "utilitiesr3.h"
-
-unsigned int flashWriteCount;
+#include "utilities_r3.h"
 
 // Flash programming utilities. Shut off all interrupts and the 
 // watchdog before calling any flash programming function to prevent
@@ -119,14 +81,14 @@ int copyMainFlashToMem (unsigned char * flashPtr, unsigned char * memPtr, int se
 	}
 	if (TRUE == okToCopy)
 	{
-		stopWatchdog();
+		stopWatchdog(); //MH OK
 		// If we're here, it's a simple copy operation
 		for (iIdx = 0; iIdx < segSize; ++iIdx)
 		{
 			*(memPtr + iIdx) = *(flashPtr + iIdx);
 		}
 		success = TRUE;
-		resetWatchdog();;
+		startWatchdog();  // MH -> start should match the stopWatchdog() above,  deprecated resetWatchdog();;
 	}
 	return success; 
 }
@@ -171,7 +133,7 @@ int  copyMemToMainFlash (unsigned char * flashPtr, unsigned char * memPtr, int m
 	{
 		return success;
 	}
-	stopWatchdog();
+	stopWatchdog();   // MH - OK
  	_disable_interrupts();		
 	// If we're here, the request is valid.
   	FCTL3 = FWKEY;                  // Clear Lock bit
@@ -197,7 +159,7 @@ int  copyMemToMainFlash (unsigned char * flashPtr, unsigned char * memPtr, int m
 	FCTL1 = FWKEY;			// Turn off the WRT bit
  	FCTL3 = FWKEY | LOCK;   // Set Lock bit
  	success = TRUE;
-	resetWatchdog();;
+	startWatchdog();  // MH -> start should match the stopWatchdog() above,  deprecated resetWatchdog();;
 	_enable_interrupts();	
 	return success;
 }
@@ -259,7 +221,7 @@ int eraseMainSegment(unsigned char * flashPtr, int segSize)
 	if (TRUE == okToErase)
 	{
  		_disable_interrupts();		// erase all segments
- 		stopWatchdog();
+ 		stopWatchdog(); //MH OK
 		for (numSegsErased = 0; numSegmentsToErase > numSegsErased; ++numSegsErased, flashPtr+=MAIN_SEGMENT_SIZE)
 		{
   			FCTL3 = FWKEY;                  // Clear Lock bit
@@ -274,7 +236,7 @@ int eraseMainSegment(unsigned char * flashPtr, int segSize)
 		}
 	}
 	FCTL3 = FWKEY | LOCK;   // Set the lock bit
-	resetWatchdog();;
+	startWatchdog();  // MH -> start should match the stopWatchdog() above,  deprecated resetWatchdog();;
  	_enable_interrupts();	
 	return success;
 }
@@ -306,7 +268,7 @@ int verifyFlashContents(unsigned char * flashPtr, unsigned char * memPtr, int me
 {
 	int ok = TRUE;
 	int numBytesCompared = 0;
-	stopWatchdog();
+	stopWatchdog(); // MH - OK
 	while ((TRUE == ok) && (numBytesCompared < memSize))
 	{
 		if (*(flashPtr + numBytesCompared) == *(memPtr + numBytesCompared))
@@ -318,7 +280,7 @@ int verifyFlashContents(unsigned char * flashPtr, unsigned char * memPtr, int me
 			ok = FALSE;
 		}
 	}
-	resetWatchdog();;
+	startWatchdog();  // MH -> start should match the stopWatchdog() above,  deprecated resetWatchdog();;
 	return ok;
 }
 
@@ -376,10 +338,28 @@ void syncToRam(unsigned char * flashPtr, unsigned char * memPtr, int memSize)
 // to the FLASH memory. FLASH segments are erased first
 //
 /////////////////////////////////////////////////////////////////////////////////////////// 
+
+#ifdef  FORCE_FLASH_WRITE
+extern WORD testWriteFlash;
+extern unsigned char updateNvRam;
+#endif
+
 int syncToFlash(unsigned char * flashPtr, unsigned char * memPtr, int memSize)
 {
 	// First see if there is a need to change by verifying the memory values
 	int success = verifyFlashContents(flashPtr, memPtr, memSize);
+
+	//// DEBUG == Simulate a Change in NV
+#ifdef  FORCE_FLASH_WRITE
+	if(testWriteFlash > 80)
+	{
+    testWriteFlash =0;
+    updateNvRam = TRUE;
+    success = FALSE;
+
+	}
+#endif
+
 	// If the verify worked, just reurn success now
 	if (success)
 	{

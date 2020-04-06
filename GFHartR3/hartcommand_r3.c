@@ -1,90 +1,39 @@
-///////////////////////////////////////////////////////////////////////////////////////////
-// Copyright (C) AB Tech Solution LLC 2011 All Rights Reserved.
-// This code may not be copied without the express written consent of 
-// AB Tech Solution LLC.
-//
-//
-// Client: GF
-//
-//
-// THIS CODE AND INFORMATION ARE PROVIDED "AS IS" WITHOUT WARRANTY OF ANY 
-// KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Module Name:  HartCommand.c
-//
-// Functional Unit: 
-//
-// Description:
-//
-// This module provides HART command interface. 
-//
-// Exported Interfaces:
-//
-// HartCommand.h - This interface file includes all exported interfaces
-//               from this module.
-//
-// Document Reference(s):
-//
-// PDD-xxxx
-//
-// Implementation Notes:
-//
-// 
-//
-// Revision History:
-// Date    Rev.   Engineer     Description
-// -------- ----- ------------ --------------
-// 04/02/11  0    Vijay Soni    Creation
-//
-// 04/07/11  0    patel    	Add funcations
-//
-///////////////////////////////////////////////////////////////////////////////////////////
- 
+/*!
+ *  \file     hartcommand_r3.c
+ *  \brief    This module provides the HART command interface
+ *
+ *  Revision History:
+ *  Date    Rev.   Engineer     Description
+ *  -------- ----- ------------ --------------
+ *  04/02/11  0    Vijay Soni    Creation
+ *
+ *  04/07/11  0    patel        Add funcations
+ *
+ */
+
 #include <msp430f5528.h>
 #include "define.h"
 #include "hardware.h"
 #include "protocols.h"
-#include "hartr3.h"
-#include "common_h_cmdr3.h"
+#include "hart_r3.h"
+#include "common_h_cmd_r3.h"
 
-#if 0
-!MH
-#include "flow_h_cmd.h"
-#include "conductivity_h_cmd.h"
-#include "level_h_cmd.h"
-#include "ma4_20_h_cmd.h"
-#include "orp_h_cmd.h"
-#include "ph_h_cmd.h"
-#include "pressure_h_cmd.h"
-#endif
 
-#include "hartcommandr3.h"
+#include "hartcommand_r3.h"
 
 // Did we get a broadcast address?
 int rcvBroadcastAddr = FALSE;
 extern HART_STARTUP_DATA_VOLATILE startUpDataLocalV;
 
-///////////////////////////////////////////////////////////////////////////////////////////
-//
-// Function Name: processHartCommand()
-//
-// Description:
-//
-// Process the HART command, generate the response.  
-//
-// Parameters: void
-//
-// Return Type: void.=== returns
-//
-// Implementation notes:
-//
-// 
-//
-/////////////////////////////////////////////////////////////////////////////////////////// 
+
+/*!
+ * \function    processHartCommand()
+ * \brief       Process the HART command, generate the response.
+ *
+ *    Isr and Drivers store Hart command message in a global buffer szHartCommadn[]. This function
+ *    process the command (by creating a response) or prepares a error response
+ *
+ */
 unsigned char processHartCommand (void)
 {
 	unsigned char rtnVal = FALSE;
@@ -268,9 +217,12 @@ void executeCommand(void)
 	case HART_CMD_40:
 		common_cmd_40();
 		break;	
-	case HART_CMD_42:
+#if 0
+	case HART_CMD_42:   // We don't support CMD_42  MH 12/6/12
 		common_cmd_42();
-		break;	
+		break;
+#endif
+
 #if 0		
 	case HART_CMD_43:
 		common_cmd_43();

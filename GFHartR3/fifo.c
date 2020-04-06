@@ -24,14 +24,20 @@
 //==============================================================================
 // FUNCTIONS
 //==============================================================================
-///
+
+/*!
+ *  \function  void resetFifo(stFifo *pFifo, BYTE *pBuffer)
+ *  \brief    reset the indicated fifo structure to initial state
+ *
+ *  \param pFifo    This is the fifo we want to reset
+ *  \param pBuffer  The memory block where the fifo is located
+ *  \return none
+ *  \sa Rev3
+ */
 /// resetFifo()
 /// Initialize all indexes to zero, point to buffer memory location
 ///
-/// \param pFifo This is the fifo we want to reset
-/// \param pBuffer The memory block where the fifo is located
-/// \return none
-/// \sa Rev3
+///
 ///
 void resetFifo(stFifo *pFifo, BYTE *pBuffer)
 {

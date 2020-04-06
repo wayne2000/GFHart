@@ -1,12 +1,25 @@
+/*!
+ *  \file   hart_r3.c
+ *  \brief  This module provides HART interface.
+ *  Created on: Sep 20, 2012
+ *  \author:
+ *  Revision History:
+ *  Date    Rev.   Engineer     Description
+ *  -------- ----- ------------ --------------
+ *  04/01/11  0    Vijay Soni    Creation
+ *  04/02/11  1    Patel     Add funcations
+ *
+ */
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 //
-// Module Name:  hart.c
+// Module Name:
 //
 // Functional Unit: 
 //
 // Description:
 //
-// This module provides HART interface. 
+//
 //
 // Exported Interfaces:
 //
@@ -21,12 +34,6 @@
 //
 // 
 //
-// Revision History:
-// Date    Rev.   Engineer     Description
-// -------- ----- ------------ --------------
-// 04/01/11  0    Vijay Soni    Creation
-//
-// 04/02/11  1    Patel    	Add funcations
 //
 //
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -37,9 +44,9 @@
 #include <string.h>
 #include "hardware.h"
 #include "protocols.h"
-#include "utilitiesr3.h"
-#include "main9900r3.h"
-#include "hartr3.h"
+#include "utilities_r3.h"
+#include "main9900_r3.h"
+#include "hart_r3.h"
 
 //==============================================================================
 //  LOCAL DEFINES
